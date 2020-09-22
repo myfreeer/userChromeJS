@@ -7,18 +7,21 @@ let UC = {};
 
 //console.log(1);
 Components.utils.import('resource://gre/modules/osfile.jsm');
-var FileUtils = Components.utils.import("resource://gre/modules/FileUtils.jsm").FileUtils;
-var chromedir = new FileUtils.File( OS.Constants.Path.libDir );
-chromedir.append('chrome');
 //console.log(chromedir);
 let _uc = {
   ALWAYSEXECUTE: 'rebuild_userChrome.uc.js',
   BROWSERCHROME: 'chrome://browser/content/browser.xhtml',
   PREF_ENABLED: 'userChromeJS.enabled',
   PREF_SCRIPTSDISABLED: 'userChromeJS.scriptsDisabled',
-  BASE_FILEURI: 'file://' + (OS.Constants.Win ? chromedir.path.replaceAll('\\', '/') : chromedir.path) + '/',
 
-  chromedir: chromedir,
+  chromedir: (() => {
+    const chromedir = Components.classes["@mozilla.org/file/local;1"]
+      .createInstance(Components.interfaces.nsIFile);
+    chromedir.initWithPath(OS.Constants.Path.libDir);
+    chromedir.append('chrome');
+    return chromedir;
+  })(),
+
   sss: Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService),
 
   getScripts: function () {
@@ -83,7 +86,7 @@ let _uc = {
     let cvstream = Cc['@mozilla.org/intl/converter-input-stream;1'].createInstance(Ci.nsIConverterInputStream);
     cvstream.init(stream, 'UTF-8', 1024, Ci.nsIConverterInputStream.DEFAULT_REPLACEMENT_CHARACTER);
     let content = '',
-        data = {};
+      data = {};
     while (cvstream.readString(4096, data)) {
       content += data.value;
       if (metaOnly && content.indexOf('// ==/UserScript==') > 0) {
@@ -95,7 +98,7 @@ let _uc = {
   },
 
   everLoaded: [],
-  
+
   loadScript: function (script, win) {
     if (!script.regex.test(win.location.href) || (script.filename != this.ALWAYSEXECUTE && !script.isEnabled)) {
       return;
@@ -152,10 +155,10 @@ let _uc = {
 
 
   getURLSpecFromFile: Components.classes["@mozilla.org/network/io-service;1"]
-                                .getService(Components.interfaces.nsIIOService)
-                                .getProtocolHandler("file")
-                                .QueryInterface(Components.interfaces.nsIFileProtocolHandler)
-                                .getURLSpecFromFile,
+    .getService(Components.interfaces.nsIIOService)
+    .getProtocolHandler("file")
+    .QueryInterface(Components.interfaces.nsIFileProtocolHandler)
+    .getURLSpecFromFile,
 
   createElement: function (doc, tag, atts, XUL = true) {
     let el = XUL ? doc.createXULElement(tag) : doc.createElement(tag);
@@ -173,7 +176,9 @@ let _uc = {
       error.init(aMsg + '\n' + err + '\n', null, null, null, null, 2, null);
     }
     Services.console.logMessage(error);
-	if (typeof console !== 'undefined' && console.log) { console.log(err, error) };
+    if (typeof console !== 'undefined' && console.log) {
+      console.log(err, error)
+    }
   }
 };
 
