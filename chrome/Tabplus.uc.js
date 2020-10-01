@@ -55,7 +55,7 @@ gBrowser.tabContainer.addEventListener("dblclick", function (event) {
     if (event.button == 0 && !event.ctrlKey) {
         const tab = event.target.closest('.tabbrowser-tab');
         if (!tab) return;
-        gBrowser.removeTab(tab);
+        // gBrowser.removeTab(tab);
         gBrowser.removeTab(tab, {animate: true});
     }
 }, false);
@@ -68,6 +68,8 @@ gBrowser.tabContainer.addEventListener("dblclick", function (event) {
     const scrollRight = true;
     const wrap = true;
     gBrowser.tabContainer.addEventListener("wheel", function (event) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
         let dir = (scrollRight ? 1 : -1) * Math.sign(event.deltaY);
         setTimeout(function () {
             gBrowser.tabContainer.advanceSelectedTab(dir, wrap);
@@ -181,11 +183,11 @@ var autselectpsearchbar = document.getElementById("searchbar");
     function monkeyPatchInsertTabAtIndexByTabPlus(tab, params = {}) {
         // console.log(tab, params);
         let {
-            bulkOrderedOpen,
+            // bulkOrderedOpen,
             index,
             openerTab,
             ownerTab,
-            pinned,
+            // pinned,
         } = params;
         let {selectedTab} = gBrowser;
         // 在当前标签页打开标签
@@ -216,7 +218,7 @@ var autselectpsearchbar = document.getElementById("searchbar");
         if (!gBrowser.__mozIsInGesture &&
                 // 关闭当前标签页
                 tab === selectedTab &&
-                selectedTab._tPos != 0 &&
+                selectedTab._tPos !== 0 &&
                 !(tab.closing || this._windowIsClosing)) {
             // 在当前标签页右侧打开新标签页
             gBrowser.tabContainer.advanceSelectedTab(-1, true);
