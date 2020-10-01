@@ -6,53 +6,22 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              v2019-09-09 fix 70+
+// @version              2020-09-30 refactor
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
     'use strict';
-
-
-//加入命令
-//将当前窗口置顶
-    let onTop;
-
-    function TabStickOnTop() {
-        try {
-            let mainWindow = document.getElementById('main-window');
-            onTop = !mainWindow.hasAttribute('ontop');
-            Components.utils.import("resource://gre/modules/ctypes.jsm");
-            var lib = ctypes.open("user32.dll");
-            var funcActiveWindow = 0;
-            try {
-                funcActiveWindow = lib.declare("GetActiveWindow", ctypes.winapi_abi, ctypes.int32_t)
-            } catch (ex) {
-                funcActiveWindow = lib.declare("GetActiveWindow", ctypes.stdcall_abi, ctypes.int32_t)
-            }
-            if (funcActiveWindow != 0) {
-                var activeWindow = funcActiveWindow();
-                var funcSetWindowPos = 0;
-                try {
-                    funcSetWindowPos = lib.declare("SetWindowPos", ctypes.winapi_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t)
-                } catch (ex) {
-                    funcSetWindowPos = lib.declare("SetWindowPos", ctypes.stdcall_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t)
-                }
-                var hwndAfter = -2;
-                if (onTop) {
-                    hwndAfter = -1;
-                    mainWindow.setAttribute('ontop', 'true')
-                } else mainWindow.removeAttribute('ontop');
-                funcSetWindowPos(activeWindow, hwndAfter, 0, 0, 0, 0, 19)
-            }
-            lib.close()
-        } catch (ex) {
-            if (typeof console !== "undefined" && console.log) {
-                console.log('Mousegestures::TabStickOnTop', ex);
-            }
-        }
-    }
+    const GESTURE_COLOR = '#0065FF';
+    // 鼠标手势盒子颜色
+    const GESTURE_LINE_WIDTH = 4;
+    // 鼠标手势盒子颜色
+    const GESTURE_BOX_COLOR = 'rgba(0, 0, 0, 0.8)';
+    // 鼠标手势箭头线宽
+    const GESTURE_ARROW_LINE_WIDTH = 50;
+    const GESTURE_TEXT_COLOR = '#FFFFFF';
 
     /**
+     * Draw an arrow to canvas
      * @param {CanvasRenderingContext2D} ctx
      * @param {number} x
      * @param {number} y
@@ -119,10 +88,10 @@
     function drawGesture(ctx, savedPath, directionChain, name) {
         const {width, height} = ctx.canvas;
         ctx.clearRect(0, 0, width, height);
-        ctx.strokeStyle = '#0065FF';
+        ctx.strokeStyle = GESTURE_COLOR;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = GESTURE_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(savedPath[0], savedPath[1]);
         for (let i = 2, l = savedPath.length; i < l;) {
@@ -142,7 +111,7 @@
             name || '未知手势'
         ];
         ctx.font = 'bold ' + textH + 'px sans-serif';
-		let textWidthArray = [];
+        let textWidthArray = [];
         for (let i = 0, l = text.length, t, w; i < l; i++) {
             t = text[i];
             w = ctx.measureText(t);
@@ -157,12 +126,12 @@
             boxW = (arrowW | 0) + 2;
             boxX = midW - (boxW >> 1);
         }
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillStyle = GESTURE_BOX_COLOR;
         ctx.fillRect(boxX, boxY, boxW, boxH);
-        ctx.fillStyle = '#FFFFFF';
+        ctx.fillStyle = GESTURE_TEXT_COLOR;
         textY += (textH >> 1);
-        ctx.lineWidth = 50;
-        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = GESTURE_ARROW_LINE_WIDTH;
+        ctx.strokeStyle = GESTURE_TEXT_COLOR;
         for (let i = 0, l = directionChain.length, x = midW - (arrowW >> 1); i < l; i++) {
             drawArrow(ctx, x, textY, arrowH, directionChain[i]);
             x += arrowH;
@@ -176,173 +145,381 @@
         }
     }
 
-    let ucjsMouseGestures = {
-        lastX: 0,
-        lastY: 0,
-        directionChain: '',
-        isMouseDownL: false,
-        isMouseDownR: false,
-        hideFireContext: false,
-        shouldFireContext: false,
-        GESTURES: {
-            'L': {
-                name: '后退', cmd: () => {
-                    var nav = gBrowser.webNavigation;
-                    if (nav.canGoBack) {
-                        nav.goBack();
-                    }
+    class MouseGestureCommand {
+        // 后退
+        static historyGoBack() {
+            const nav = gBrowser.webNavigation;
+            if (nav.canGoBack) {
+                nav.goBack();
+            }
+        }
+
+        // 前进
+        static historyGoForward() {
+            var nav = gBrowser.webNavigation;
+            if (nav.canGoForward) {
+                nav.goForward();
+            }
+        }
+
+        // 向上滚动
+        static scrollPageUp() {
+            goDoCommand('cmd_scrollPageUp');
+        }
+
+        // 向下滚动
+        static scrollPageDown() {
+            goDoCommand('cmd_scrollPageDown');
+        }
+
+        // 转到页首
+        static scrollTop() {
+            goDoCommand('cmd_scrollTop');
+        }
+
+        // 转到页尾
+        static scrollBottom() {
+            goDoCommand('cmd_scrollBottom');
+        }
+
+        // 刷新当前页面
+        static reloadCurrentPage() {
+            document.getElementById("Browser:Reload").doCommand();
+        }
+
+        // 刷新当前页面
+        static reloadCurrentPageSkipCache() {
+            document.getElementById("Browser:ReloadSkipCache").doCommand();
+        }
+
+        // 打开新标签
+        static openNewTab() {
+            BrowserOpenTab();
+        }
+
+        // 恢复关闭的标签
+        static restoreClosedTab() {
+            try {
+                document.getElementById('History:UndoCloseTab').doCommand();
+            } catch (ex) {
+                if (typeof console !== "undefined" && console.log) {
+                    console.log('恢复关闭的标签', ex);
                 }
-            },
-            'R': {
-                name: '前进', cmd: () => {
-                    var nav = gBrowser.webNavigation;
-                    if (nav.canGoForward) {
-                        nav.goForward();
-                    }
+                if ('undoRemoveTab' in gBrowser) {
+                    gBrowser.undoRemoveTab();
+                } else {
+                    throw 'Session Restore feature is disabled.';
                 }
-            },
+            }
+        }
 
+        // 激活左边的标签页
+        static advanceLeftTab() {
+            gBrowser.tabContainer.advanceSelectedTab(-1, true);
+        }
 
-            'U': {name: '向上滚动', cmd: () => goDoCommand('cmd_scrollPageUp')},
-            'D': {name: '向下滚动', cmd: () => goDoCommand('cmd_scrollPageDown')},
+        // 激活右边的标签页
+        static advanceRightTab() {
+            gBrowser.tabContainer.advanceSelectedTab(1, true);
+        }
 
-            'DU': {name: '转到页首', cmd: () => goDoCommand('cmd_scrollTop')},
-            'UD': {name: '转到页尾', cmd: () => goDoCommand('cmd_scrollBottom')},
+        // 激活第一个标签页
+        static advanceFirstTab() {
+            const tabs = gBrowser.visibleTabs || gBrowser.mTabs;
+            if (!tabs) {
+                return;
+            }
+            gBrowser.selectedTab = tabs[0];
+        }
 
+        // 激活最后一个标签页
+        static advanceLastTab() {
+            const tabs = gBrowser.visibleTabs || gBrowser.mTabs;
+            if (!tabs) {
+                return;
+            }
+            gBrowser.selectedTab = tabs[tabs.length - 1];
+        }
 
-            'LR': {
-                name: '刷新当前页面', cmd: function () {
-                    document.getElementById("Browser:Reload").doCommand();
+        // 关闭当前标签并激活左侧标签
+        static closeCurrentTabAndGotoLeftTab() {
+            const tabs = gBrowser.visibleTabs || gBrowser.mTabs;
+            let t = gBrowser.selectedTab;
+            // 如果是最左侧标签页则关闭当前标签并激活最左侧标签
+            if (!t._tPos) { // t._tPos === 0
+                gBrowser.removeTab(t);
+                gBrowser.selectedTab = tabs[0];
+                return;
+            }
+            gBrowser.tabContainer.advanceSelectedTab(-1, true);
+            var n = gBrowser.selectedTab;
+            gBrowser.removeTab(t);
+            gBrowser.selectedTab = n;
+        }
+
+        // 关闭当前标签并激活右侧标签
+        static closeCurrentTabAndGotoRightTab() {
+            const tabs = gBrowser.visibleTabs || gBrowser.mTabs;
+            let t = gBrowser.selectedTab;
+            let lastTab = tabs[tabs.length - 1];
+            // 如果是最右侧标签页则关闭当前标签并激活最右侧标签
+            if (t === lastTab) {
+                gBrowser.removeTab(t);
+                // new last tab
+                gBrowser.selectedTab = tabs[tabs.length - 1];
+                return;
+            }
+            gBrowser.tabContainer.advanceSelectedTab(1, true);
+            let n = gBrowser.selectedTab;
+            gBrowser.removeTab(t);
+            gBrowser.selectedTab = n;
+        }
+
+        // 将当前窗口置顶（未测试）(仅 windows)
+        static tabStickOnTop() {
+            try {
+                let mainWindow = document.getElementById('main-window');
+                MouseGestureCommand._onTop = !mainWindow.hasAttribute('ontop');
+                if (typeof ctypes === "undefined") {
+                    Components.utils.import("resource://gre/modules/ctypes.jsm");
                 }
-            },
-            //'DU': {name: '网址根目录', cmd:  function() { gBrowser.loadURI("javascript:document.location.href=window.location.origin?window.location.origin+'/':window.location.protocol+'/'+window.location.host+'/'", { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(), });},},
-            'LRL': {
-                name: '跳过缓存刷新当前页面', cmd: function () {
-                    document.getElementById("Browser:ReloadSkipCache").doCommand();
+                var lib = ctypes.open("user32.dll");
+                var funcActiveWindow = 0;
+                // noinspection UnusedCatchParameterJS
+                try {
+                    // noinspection JSDeprecatedSymbols
+                    funcActiveWindow = lib.declare("GetActiveWindow", ctypes.winapi_abi, ctypes.int32_t);
+                } catch (ex) {
+                    // noinspection JSDeprecatedSymbols
+                    funcActiveWindow = lib.declare("GetActiveWindow", ctypes.stdcall_abi, ctypes.int32_t);
                 }
-            },
-
-
-            'RU': {
-                name: '打开新标签', cmd: function () {
-                    BrowserOpenTab();
-                }
-            },
-            'RL': {
-                name: '恢复关闭的标签', cmd: function () {
+                if (funcActiveWindow !== 0) {
+                    var activeWindow = funcActiveWindow();
+                    var funcSetWindowPos;
+                    // noinspection UnusedCatchParameterJS
                     try {
-                        document.getElementById('History:UndoCloseTab').doCommand();
+                        // noinspection JSDeprecatedSymbols
+                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.winapi_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
                     } catch (ex) {
-                        if (typeof console !== "undefined" && console.log) {
-                            console.log('恢复关闭的标签', ex);
-                        }
-                        if ('undoRemoveTab' in gBrowser) gBrowser.undoRemoveTab(); else throw "Session Restore feature is disabled."
+                        // noinspection JSDeprecatedSymbols
+                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.stdcall_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
                     }
+                    var hwndAfter = -2;
+                    if (MouseGestureCommand._onTop) {
+                        hwndAfter = -1;
+                        mainWindow.setAttribute('ontop', 'true');
+                    } else mainWindow.removeAttribute('ontop');
+                    funcSetWindowPos(activeWindow, hwndAfter, 0, 0, 0, 0, 19);
                 }
-            },
-
-            'UL': {
-                name: '激活左边的标签页', cmd: function (event) {
-                    gBrowser.tabContainer.advanceSelectedTab(-1, true);
+                lib.close();
+            } catch (ex) {
+                if (typeof console !== "undefined" && console.log) {
+                    console.log('MouseGestureCommand::TabStickOnTop', ex);
                 }
-            },
-            'UR': {
-                name: '激活右边的标签页', cmd: function (event) {
-                    gBrowser.tabContainer.advanceSelectedTab(1, true);
+            }
+        }
+
+        // 添加/移除书签（未测试）
+        static toggleBookmark() {
+            document.getElementById("Browser:AddBookmarkAs").doCommand();
+        }
+
+        // 关闭当前标签
+        static closeCurrentTab() {
+            if (gBrowser.selectedTab.getAttribute("pinned") !== "true") {
+                gBrowser.removeCurrentTab();
+            }
+        }
+
+        // 打开附加组件
+        static openAddonManager() {
+            BrowserOpenAddonsMgr();
+        }
+
+        // 打开选项
+        static openPreferences() {
+            openPreferences();
+        }
+
+        // 查看页面信息
+        static showPageInfo() {
+            BrowserPageInfo();
+        }
+
+        // 打开/关闭历史窗口(侧边栏)
+        static toggleHistorySidebar() {
+            SidebarUI.toggle("viewHistorySidebar");
+        }
+
+        static toggleBookmarkToolbar() {
+            const bar = document.getElementById("PersonalToolbar");
+            if (bar) {
+                setToolbarVisibility(bar, bar.collapsed);
+            }
+        }
+
+        // 重启浏览器
+        static restartBrowser() {
+            // BrowserUtils.restartApplication();
+            Services.startup.quit(Services.startup.eRestart | Services.startup.eAttemptQuit);
+        }
+
+        // 重启浏览器
+        static stopBrowser() {
+            // Services.startup.quit(Services.startup.eAttemptQuit);
+            goQuitApplication();
+        }
+
+        // 清除启动缓存并重启浏览器
+        static invalidateCacheAndRestart() {
+            Services.appinfo.invalidateCachesOnRestart();
+            BrowserUtils.restartApplication();
+        }
+
+        // 关闭左侧标签页
+        static closeAllLeftTabs() {
+            for (let i = gBrowser.selectedTab._tPos - 1; i >= 0; i--) {
+                if (!gBrowser.tabs[i].pinned) {
+                    gBrowser.removeTab(gBrowser.tabs[i], {animate: true});
                 }
-            },
+            }
+        }
 
-            'ULU': {
-                name: '激活第一个标签页', cmd: function (event) {
-                    gBrowser.selectedTab = (gBrowser.visibleTabs || gBrowser.mTabs)[0];
-                }
-            },
-            'URU': {
-                name: '激活最后一个标签页', cmd: function (event) {
-                    gBrowser.selectedTab = (gBrowser.visibleTabs || gBrowser.mTabs)[(gBrowser.visibleTabs || gBrowser.mTabs).length - 1];
-                }
-            },
-            'DL': {
-                name: '关闭当前标签并激活左侧标签', cmd: function (event) {
-                    let t = gBrowser.selectedTab;
-                    // 如果是最左侧标签页则关闭当前标签并激活最左侧标签
-                    if (!t._tPos) { // t._tPos === 0
-                        gBrowser.removeTab(t);
-                        gBrowser.selectedTab = (gBrowser.visibleTabs || gBrowser.mTabs)[0];
-                        return;
-                    }
-                    gBrowser.tabContainer.advanceSelectedTab(-1, true);
-                    var n = gBrowser.selectedTab;
-                    gBrowser.removeTab(t);
-                    gBrowser.selectedTab = n;
-                }
-            },
-            'DR': {
-                name: '关闭当前标签并激活右侧标签', cmd: function (event) {
-                    let t = gBrowser.selectedTab;
-                    let lastTab = (gBrowser.visibleTabs || gBrowser.mTabs)[(gBrowser.visibleTabs || gBrowser.mTabs).length - 1];
-                    // 如果是最右侧标签页则关闭当前标签并激活最右侧标签
-                    if (t === lastTab) {
-                        gBrowser.removeTab(t);
-                        gBrowser.selectedTab = (gBrowser.visibleTabs || gBrowser.mTabs)[(gBrowser.visibleTabs || gBrowser.mTabs).length - 1];
-                        return;
-                    }
-                    gBrowser.tabContainer.advanceSelectedTab(1, true);
-                    let n = gBrowser.selectedTab;
-                    gBrowser.removeTab(t);
-                    gBrowser.selectedTab = n;
+        // 关闭右侧标签页
+        static closeAllRightTabs() {
+            // gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);
+            // gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);
+            gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);
+        }
 
-                }
-            },
+        // 关闭其他标签页
+        static closeAllOtherTabs() {
+            gBrowser.removeAllTabsBut(gBrowser.selectedTab);
+        }
 
-            'W+': {name: '激活右边的标签页', cmd: function(event) { gBrowser.tabContainer.advanceSelectedTab(+1, true); }},
-            'W-': {name: '激活左边的标签页', cmd: function(event) { gBrowser.tabContainer.advanceSelectedTab(-1, true); }},
-            //'DL': {name: '添加/移除书签', cmd:  function() {document.getElementById("Browser:AddBookmarkAs").doCommand();	} },
-            //'DR': {name: '关闭当前标签', cmd: function(event) {if (gBrowser.selectedTab.getAttribute("pinned") !== "true") { gBrowser.removeCurrentTab();}}},
+    }
+
+    const defaultGestures = {
+        'L': {name: '后退', cmd: MouseGestureCommand.historyGoBack},
+        'R': {name: '前进', cmd: MouseGestureCommand.historyGoForward},
 
 
-            //'URD': {name: '打开附加组件',  cmd: function(event) {	BrowserOpenAddonsMgr();	}},
-            //'DRU': {name: '打开选项',  cmd: function(event) {		openPreferences(); }},
+        'U': {name: '向上滚动', cmd: MouseGestureCommand.scrollPageUp},
+        'D': {name: '向下滚动', cmd: MouseGestureCommand.scrollPageDown},
 
+        'DU': {name: '转到页首', cmd: MouseGestureCommand.scrollTop},
+        'UD': {name: '转到页尾', cmd: MouseGestureCommand.scrollBottom},
 
-            //		'LU': {name: '查看页面信息', cmd: function(event) {	BrowserPageInfo(); }},
-            //	'LD': {name: '侧边栏打开当前页', cmd: function(event) { window.document.getElementById("pageActionButton").click(); window.setTimeout(function() {window.document.getElementById("pageAction-panel-side-view_mozilla_org").click();}, 0);}},
+        'LR': {name: '刷新当前页面', cmd: MouseGestureCommand.reloadCurrentPage},
+        'LRL': {name: '跳过缓存刷新当前页面', cmd: MouseGestureCommand.reloadCurrentPageSkipCache},
 
+        'RU': {name: '打开新标签', cmd: MouseGestureCommand.openNewTab},
+        'RL': {name: '恢复关闭的标签', cmd: MouseGestureCommand.restoreClosedTab},
 
-            //	'LDR': {name: '打开历史窗口(侧边栏)',  cmd: function(event) {SidebarUI.toggle("viewHistorySidebar");	}},
-            //	'RDL': {name: '打开书签工具栏',  cmd: function(event) {	var bar = document.getElementById("PersonalToolbar"); setToolbarVisibility(bar, bar.collapsed);	}},
+        'UL': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
+        'UR': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
+        'ULU': {name: '激活第一个标签页', cmd: MouseGestureCommand.advanceFirstTab},
+        'URU': {name: '激活最后一个标签页', cmd: MouseGestureCommand.advanceLastTab},
 
-
-            //	'RLRL': {name: '重启浏览器', cmd: function(event) {		Services.startup.quit(Services.startup.eRestart | Services.startup.eAttemptQuit); 	}},
-            //	'LRLR': {name: '重启浏览器', cmd: function(event) {		Services.startup.quit(Services.startup.eRestart | Services.startup.eAttemptQuit);   }},
-            //	'URDLU': {name: '关闭浏览器',  cmd: function(event) {		goQuitApplication();		}},
-
-
-            //	'RULD': {name: '添加到稍后阅读',  cmd: function(event) {document.getElementById("pageAction-urlbar-_cd7e22de-2e34-40f0-aeff-cec824cbccac_").click();}},
-            //	'RULDR': {name: '添加到稍后阅读',  cmd: function(event) {document.getElementById("pageAction-urlbar-_cd7e22de-2e34-40f0-aeff-cec824cbccac_").click();}},
-
-
-            // 'LDL': {name: '关闭左侧标签页', cmd: function(event) {	for (let i = gBrowser.selectedTab._tPos - 1; i >= 0; i--) if (!gBrowser.tabs[i].pinned){ gBrowser.removeTab(gBrowser.tabs[i], {animate: true});}}},
-            // 'RDR': {name: '关闭右侧标签页', cmd: function(event) {gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);	gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);gBrowser.removeTabsToTheEndFrom(gBrowser.selectedTab);}},
-            // 'RDLRDL': {name: '关闭其他标签页', cmd: function(event) {gBrowser.removeAllTabsBut(gBrowser.selectedTab);}},
-
-            //'LDRUL': {name: '打开鼠标手势设置文件',  cmd: function(event) {FileUtils.getFile('UChrm',['SubScript', 'MouseGestures.uc.js']).launch();}},
-            //'RLD': {name: '将当前窗口置顶',  cmd: function(event) {TabStickOnTop();}},
-
+        'DL': {
+            name: '关闭当前标签并激活左侧标签',
+            cmd: MouseGestureCommand.closeCurrentTabAndGotoLeftTab
+        },
+        'DR': {
+            name: '关闭当前标签并激活右侧标签',
+            cmd: MouseGestureCommand.closeCurrentTabAndGotoRightTab
         },
 
+        'W+': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
+        'W-': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
+    };
 
-        init: function () {
-            let self = this;
-            ['mousedown', 'mousemove', 'mouseup', 'contextmenu', 'DOMMouseScroll'].forEach(type => {
-                gBrowser.tabpanels.addEventListener(type, self, true);
-            });
-            gBrowser.tabpanels.addEventListener('unload', () => {
-                ['mousedown', 'mousemove', 'mouseup', 'contextmenu', 'DOMMouseScroll'].forEach(type => {
-                    gBrowser.tabpanels.removeEventListener(type, self, true);
+    class UcMouseGesture {
+        constructor(gestures = defaultGestures) {
+            // 上一次事件时的screenX
+            this.lastX = 0;
+            // 上一次事件时的screenY
+            this.lastY = 0;
+            // 当前的鼠标手势
+            this.directionChain = '';
+            // 是否在绘制鼠标手势
+            this.isMouseDownR = false;
+            // 是否拦截右键菜单触发
+            this.hideFireContext = false;
+            // 鼠标手势事件
+            this.events = [
+                'mousedown',
+                'mousemove',
+                'mouseup',
+                'wheel',
+                'keydown'
+            ];
+            // 鼠标手势列表
+            this.gestures = gestures;
+            // 绘制的鼠标手势中各条线的坐标
+            this.savedPath = [];
+            // 绘制鼠标手势的canvas的容器
+            this.xdTrailArea = null;
+            /**
+             * 绘制鼠标手势的canvas的 CanvasRenderingContext2D
+             * @type CanvasRenderingContext2D | null
+             */
+            this.xdTrailAreaContext = null;
+
+            // allow cmd of gestures to be string
+            if (this.gestures !== defaultGestures) {
+                for (let g of Object.values(this.gestures)) {
+                    if (typeof g.cmd === "function") {
+                        continue;
+                    }
+                    let c = MouseGestureCommand[g.cmd];
+                    if (c) {
+                        g.cmd = c;
+                    } else {
+                        Reflect.deleteProperty(g, 'cmd');
+                    }
+                }
+            }
+        }
+
+        bindEvent() {
+            for (let i = 0, a = this.events, l = a.length, type; i < l; i++) {
+                type = a[i];
+                gBrowser.tabpanels.addEventListener(type, this, {
+                    capture: true,
+                    passive: true
                 });
-            }, false);
-        },
+            }
+            // 需要拦截此事件，故不可为 passive
+            gBrowser.tabpanels.addEventListener('contextmenu', this, true);
+            const {mPanelContainer} = gBrowser;
+            if (mPanelContainer) {
+                mPanelContainer.addEventListener("mousemove", this, {
+                    capture: false,
+                    passive: true
+                });
+            }
+            gBrowser.tabpanels.addEventListener('unload', () => this.onUnload(), false);
+            window.addEventListener('blur', this);
+        }
+
+        onUnload() {
+            this.unbindEvent();
+        }
+
+        unbindEvent() {
+            for (let i = 0, a = this.events, l = a.length, type; i < l; i++) {
+                type = a[i];
+                gBrowser.tabpanels.removeEventListener(type, this, true);
+            }
+            gBrowser.tabpanels.removeEventListener('contextmenu', this, true);
+            const {mPanelContainer} = gBrowser;
+            if (mPanelContainer) {
+                mPanelContainer.removeEventListener("mousemove", this, false);
+            }
+            window.removeEventListener('blur', this);
+        }
+
         draw() {
             /**
              * @type CanvasRenderingContext2D
@@ -356,118 +533,178 @@
             if (!savedPath || !savedPath.length || (savedPath.length & 1)) {
                 return;
             }
-            drawGesture(ctx, savedPath, this.directionChain, this.GESTURES[this.directionChain]?.name);
-        },
-        handleEvent: function (event) {
-            switch (event.type) {
-                case 'mousedown':
-                    if (event.button == 2) {
-                        (gBrowser.mPanelContainer || gBrowser.tabpanels).addEventListener("mousemove", this, false);
-                        this.isMouseDownR = true;
-                        this.hideFireContext = false;
-                        [this.lastX, this.lastY, this.directionChain] = [event.screenX, event.screenY, ''];
-                    }
-                    if (event.button == 0) {
-                        this.isMouseDownR = false;
-                        this.stopGesture();
-                    }
-                    break;
-                case 'mousemove':
-                    if (this.isMouseDownR) {
-                        let [subX, subY] = [event.screenX - this.lastX, event.screenY - this.lastY];
-                        let [distX, distY] = [(subX > 0 ? subX : (-subX)), (subY > 0 ? subY : (-subY))];
-                        let direction;
-                        if (distX < 10 && distY < 10) return;
-                        if (distX > distY) direction = subX < 0 ? 'L' : 'R';
-                        else direction = subY < 0 ? 'U' : 'D';
-                        if (!this.xdTrailArea) {
-                            this.xdTrailArea = document.createXULElement('hbox');
-                            let canvas = document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
-                            let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
-                            canvas.setAttribute('width', clientWidth);
-                            canvas.setAttribute('height', clientHeight);
-                            //console.log(canvas)
-                            //console.log(gBrowser.selectedBrowser)
-                            this.xdTrailAreaContext = canvas.getContext('2d');
-                            this.savedPath = [
-                                this.lastX - gBrowser.selectedBrowser.screenX,
-                                this.lastY - gBrowser.selectedBrowser.screenY
-                            ];
-                            this.xdTrailArea.style.cssText = '-moz-user-focus: none !important;-moz-user-select: none !important;display: -moz-box !important;box-sizing: border-box !important;pointer-events: none !important;margin: 0 !important;padding: 0 !important;width: 100% !important;height: ' + clientHeight + 'px !important;border: none !important;box-shadow: none !important;overflow: hidden !important;background: none !important;opacity: 0.9 !important;position: fixed !important;z-index: 2147483647 !important;';
-                            this.xdTrailArea.appendChild(canvas);
-                            gBrowser.selectedBrowser.parentNode.insertBefore(this.xdTrailArea, gBrowser.selectedBrowser.nextSibling);
-                        }
-                        if (this.xdTrailAreaContext) {
-                            this.savedPath.push(
-                                    event.screenX - gBrowser.selectedBrowser.screenX,
-                                    event.screenY - gBrowser.selectedBrowser.screenY);
-                            requestAnimationFrame(() => {
-                                try {
-                                    this.draw();
-                                } catch (e) {
-                                    console.log(e)
-                                }
-                            });
-                            this.lastX = event.screenX;
-                            this.lastY = event.screenY;
-                        }
-                        if (direction != this.directionChain.charAt(this.directionChain.length - 1)) {
-                            this.directionChain += direction;
-                            StatusPanel._label = this.GESTURES[this.directionChain] ? '手势: ' + this.directionChain + ' ' + this.GESTURES[this.directionChain].name : '未知手势:' + this.directionChain;
-                        }
-                    }
-                    break;
-                case 'mouseup':
-                    if (this.isMouseDownR && event.button == 2) {
-                        if (this.directionChain) this.shouldFireContext = false;
-                        this.isMouseDownR = false;
-                        this.directionChain && this.stopGesture();
-                    }
-                    break;
-                case 'contextmenu':
-                    if (this.isMouseDownR || this.hideFireContext) {
-                        this.shouldFireContext = true;
-                        this.hideFireContext = false;
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }
-                    break;
-                case 'DOMMouseScroll':
-                    if (this.isMouseDownR) {
-                        this.shouldFireContext = false;
-                        this.hideFireContext = true;
-                        this.directionChain = 'W' + (event.detail > 0 ? '+' : '-');
-                        this.stopGesture();
-                    }
-                    break;
-            }
-        },
-        stopGesture: function () {
-            if (this.GESTURES[this.directionChain]) {
+            let g = this.gestures[this.directionChain];
+            drawGesture(ctx, savedPath, this.directionChain, g && g.name);
+        }
+
+        endGesture() {
+            this.isMouseDownR = false;
+            // this.shouldFireContext = false;
+            this.hideFireContext = true;
+            this.directionChain = '';
+            this.stopGesture();
+        }
+
+        stopGesture() {
+            let g = this.gestures[this.directionChain];
+            if (g && g.cmd) {
                 try {
-                	gBrowser.__mozIsInGesture = 1;
-                    this.GESTURES[this.directionChain].cmd();
+                    Reflect.set(gBrowser, '__mozIsInGesture', 1);
+                    g.cmd();
                 } catch (e) {
                     if (typeof console !== 'undefined' && console.log) {
                         console.log(this.directionChain, this.GESTURES[this.directionChain], e);
                     }
                 }
-                gBrowser.__mozIsInGesture = 0;
+                if (!Reflect.deleteProperty(gBrowser, '__mozIsInGesture')) {
+                    Reflect.set(gBrowser, '__mozIsInGesture', 0);
+                }
             }
             if (this.xdTrailArea) {
                 this.xdTrailArea.parentNode.removeChild(this.xdTrailArea);
                 this.xdTrailArea = null;
                 this.xdTrailAreaContext = null;
-                this.savedPath = null;
+                this.savedPath = [];
             }
             this.directionChain = '';
             setTimeout(() => StatusPanel._label = '', 2000);
             this.hideFireContext = true;
         }
-    };
-    ucjsMouseGestures.init();
-})
-();
 
+        createCanvas() {
+            this.xdTrailArea = document.createXULElement('hbox');
+            let canvas = document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
+            let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
+            canvas.setAttribute('width', clientWidth);
+            canvas.setAttribute('height', clientHeight);
+            this.xdTrailAreaContext = canvas.getContext('2d');
+            this.xdTrailArea.style.cssText = `
+-moz-user-focus: none !important;
+-moz-user-select: none !important;
+display: -moz-box !important;
+box-sizing: border-box !important;
+pointer-events: none !important;
+margin: 0 !important;
+padding: 0 !important;
+width: 100% !important;
+height: ${clientHeight}px !important;
+border: none !important;
+box-shadow: none !important;
+overflow: hidden !important;
+background: none !important;
+position: fixed !important;
+z-index: 2147483647 !important;`;
+            this.xdTrailArea.appendChild(canvas);
+            gBrowser.selectedBrowser.parentNode.insertBefore(
+                    this.xdTrailArea, gBrowser.selectedBrowser.nextSibling);
 
+        }
 
+        /// region event handlers
+
+        mousedown(event) {
+            if (event.button === 2) {
+                this.isMouseDownR = true;
+                this.hideFireContext = false;
+                [this.lastX, this.lastY, this.directionChain] = [event.screenX, event.screenY, ''];
+            }
+            if (event.button === 0) {
+                this.isMouseDownR = false;
+                this.stopGesture();
+            }
+        }
+
+        mousemove(event) {
+            if (!this.isMouseDownR) {
+                return;
+            }
+            let [subX, subY] = [event.screenX - this.lastX, event.screenY - this.lastY];
+            let [distX, distY] = [(subX > 0 ? subX : (-subX)), (subY > 0 ? subY : (-subY))];
+            let direction;
+            if (distX < 10 && distY < 10) return;
+            if (distX > distY) direction = subX < 0 ? 'L' : 'R';
+            else direction = subY < 0 ? 'U' : 'D';
+            if (!this.xdTrailArea) {
+                this.createCanvas();
+                this.savedPath = [
+                    this.lastX - gBrowser.selectedBrowser.screenX,
+                    this.lastY - gBrowser.selectedBrowser.screenY
+                ];
+            }
+            if (this.xdTrailAreaContext) {
+                this.savedPath.push(
+                        event.screenX - gBrowser.selectedBrowser.screenX,
+                        event.screenY - gBrowser.selectedBrowser.screenY);
+                requestAnimationFrame(() => {
+                    try {
+                        this.draw();
+                    } catch (e) {
+                        console.log(e);
+                    }
+                });
+                this.lastX = event.screenX;
+                this.lastY = event.screenY;
+            }
+            if (direction !== this.directionChain.charAt(this.directionChain.length - 1)) {
+                this.directionChain += direction;
+                let g = this.gestures[this.directionChain];
+                StatusPanel._label = g ?
+                        '手势: ' + this.directionChain + ' ' + g.name :
+                        '未知手势:' + this.directionChain;
+            }
+        }
+
+        mouseup(event) {
+            if (this.isMouseDownR && event.button === 2) {
+                // if (this.directionChain) this.shouldFireContext = false;
+                this.isMouseDownR = false;
+                this.directionChain && this.stopGesture();
+                // event.stopImmediatePropagation();
+            }
+        }
+
+        contextmenu(event) {
+            if (this.isMouseDownR || this.hideFireContext) {
+                // this.shouldFireContext = true;
+                this.hideFireContext = false;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        }
+
+        wheel(event) {
+            if (!this.isMouseDownR) {
+                return;
+            }
+            // this.shouldFireContext = false;
+            this.hideFireContext = true;
+            this.directionChain = 'W' + (event.deltaY > 0 ? '+' : '-');
+            this.stopGesture();
+        }
+
+        keydown(event) {
+            if (this.isMouseDownR && event.key === 'Escape') {
+                this.endGesture();
+            }
+        }
+
+        blur() {
+            if (this.isMouseDownR) {
+                this.endGesture();
+            }
+        }
+
+        /// endregion event handlers
+
+        // noinspection JSUnusedGlobalSymbols
+        handleEvent(event) {
+            let fn = this[event.type];
+            if (typeof fn === "function") {
+                return fn.call(this, event);
+            }
+        }
+    }
+
+    let ucjsMouseGestures = new UcMouseGesture();
+    ucjsMouseGestures.bindEvent();
+})();
