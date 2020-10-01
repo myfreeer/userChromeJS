@@ -6,7 +6,7 @@
 // @version        fix 67+，修正在微信网页版，暴力猴编辑器上的滚动条错误 by @runningcheese
 // @version        0.0.3
 // @note           Thanks to Griever(https://github.com/Griever/userChromeJS/blob/master/SmartScrollbar.uc.js) and Paul Rouget(https://gist.github.com/4003205)
-// @note...........0.0.3 Fixed a problem of breaking hbox layout 
+// @note...........0.0.3 Fixed a problem of breaking hbox layout
 // @note           0.0.2 Remove usage of E4X (https://bugzilla.mozilla.org/show_bug.cgi?id=788293)
 // ==/UserScript==
 
@@ -20,56 +20,59 @@
         enabled = true;
     }
 
- var css = '\
-    @namespace url(http: //www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);\
-    @-moz-document regexp("((?!wx2.qq.com).)*"){\
-    scrollbar {\
-        -moz-appearance: none!important;\
-        position: relative;\
-        background-color: transparent;\
-        background-image: none;\
-        z-index: 100000;\
-        padding: 0px;\
-    }\
-    scrollbar[orient = "vertical"] {\
-        -moz-margin-start: -12px;\
-        min-width: 12px;\
-    }\
-    scrollbar[orient = "vertical"] thumb {\
-        min-height: 50px;\
-    }\
-   scrollbar[orient = "horizontal"] {\
-        margin-top: -12px;\
-        min-height: 12px;\
-    }\
-    scrollbar[orient = "horizontal"] thumb {\
-        min-width: 50px;\
-    }\
-    scrollbar thumb {\
-        -moz-appearance: none!important;\
-        border-width: 0px!important;\
-        border-radius: 5px!important;\
-        background-color: rgba(0, 0, 0, 0.2)!important;\
-    }\
-    scrollbar:hover thumb{\
-        background-color: #9B9B9B!important;\
-    }\
-    scrollbar:active thumb{\
-        background-color: #9B9B9B!important;\
-    }\
-    scrollbar scrollbarbutton,scrollbar gripper{\
-        display: none;}\
-}\
-    @-moz-document url-prefix("moz-extension://"){\
-    scrollbar {\
-         z-index: 2000!important;\
-    }}\
-   }';
+  var css = `@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document regexp("((?!wx2.qq.com).)*") {
+    scrollbar {
+        -moz-appearance: none !important;
+        position: relative;
+        background-color: transparent;
+        background-image: none;
+        z-index: 100000;
+        padding: 0px;
+    }
+    scrollbar[orient = "vertical"] {
+        -moz-margin-start: -12px;
+        min-width: 12px;
+    }
+    scrollbar[orient = "vertical"] thumb {
+        min-height: 50px;
+    }
+    scrollbar[orient = "horizontal"] {
+        margin-top: -12px;
+        min-height: 12px;
+    }
+    scrollbar[orient = "horizontal"] thumb {
+        min-width: 50px;
+    }
+    scrollbar thumb {
+        -moz-appearance: none !important;
+        border-width: 0px !important;
+        border-radius: 5px !important;
+        background-color: rgba(0, 0, 0, 0.2) !important;
+    }
+    scrollbar:hover thumb {
+        background-color: #9B9B9B !important;
+    }
+    scrollbar:active thumb {
+        background-color: #9B9B9B !important;
+    }
+    scrollbar scrollbarbutton, scrollbar gripper {
+        display: none;
+    }
+}
+
+@-moz-document url-prefix("moz-extension://") {
+    scrollbar {
+        z-index: 2000 !important;
+    }
+}
+`;
 
     var sss = Cc['@mozilla.org/content/style-sheet-service;1'].getService(Ci.nsIStyleSheetService);
     var uri = makeURI('data:text/css;charset=UTF=8,' + encodeURIComponent(css));
 
-  
+
 
     if (enabled) {
         sss.loadAndRegisterSheet(uri, sss.AGENT_SHEET);

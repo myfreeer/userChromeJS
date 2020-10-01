@@ -8,8 +8,8 @@ var xPref = {
   // uma preferência assim, na verdade nunca vi uma
   get: function (prefPath, def = false, valueIfUndefined, setDefault = true) {
     let sPrefs = def ?
-                   Services.prefs.getDefaultBranch(null) :
-                   Services.prefs;
+      Services.prefs.getDefaultBranch(null) :
+      Services.prefs;
 
     try {
       switch (sPrefs.getPrefType(prefPath)) {
@@ -33,8 +33,8 @@ var xPref = {
 
   set: function (prefPath, value, def = false) {
     let sPrefs = def ?
-                   Services.prefs.getDefaultBranch(null) :
-                   Services.prefs;
+      Services.prefs.getDefaultBranch(null) :
+      Services.prefs;
 
     switch (typeof value) {
       case 'string':
