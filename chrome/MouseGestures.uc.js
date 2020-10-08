@@ -29,9 +29,6 @@
      * @param {string} rotate
      */
     function drawArrow(ctx, x, y, size, rotate = 'R') {
-        if (rotate) {
-            ctx.rotate(rotate);
-        }
         let w = size, h = w;
         ctx.translate(x, y);
         switch (rotate) {
@@ -116,14 +113,14 @@
             t = text[i];
             w = ctx.measureText(t);
             if (w.width > boxW) {
-                boxW = (w.width | 0) + 2;
+                boxW = (w.width | 0) + 8;
                 boxX = midW - (boxW >> 1);
             }
             textWidthArray[i] = midW - (w.width >> 1);
         }
         let arrowH = textH + (textH >> 1), arrowW = arrowH * directionChain.length;
         if (arrowW > boxW) {
-            boxW = (arrowW | 0) + 2;
+            boxW = (arrowW | 0) + 8;
             boxX = midW - (boxW >> 1);
         }
         ctx.fillStyle = GESTURE_BOX_COLOR;
@@ -455,7 +452,7 @@
                 'keydown'
             ];
             // 鼠标手势列表
-            this.gestures = gestures;
+            this.setGestures(gestures);
             // 绘制的鼠标手势中各条线的坐标
             this.savedPath = [];
             // 绘制鼠标手势的canvas的容器
@@ -466,6 +463,10 @@
              */
             this.xdTrailAreaContext = null;
 
+        }
+
+        setGestures(gestures) {
+            this.gestures = gestures;
             // allow cmd of gestures to be string
             if (this.gestures !== defaultGestures) {
                 for (let g of Object.values(this.gestures)) {
