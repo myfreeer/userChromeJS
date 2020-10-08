@@ -31,6 +31,9 @@ let _uc = {
       let file = files.getNext().QueryInterface(Ci.nsIFile);
       if (/\.uc\.js$/i.test(file.leafName)) {
         _uc.getScriptData(file);
+      } else if ('userchrome.css' === file.leafName.toLowerCase()) {
+        // console.log(file.leafName);
+        _uc.loadUserChromeCss(file);
       }
     }
   },
@@ -129,6 +132,11 @@ let _uc = {
     }
   },
 
+  loadUserChromeCss(file) {
+    const url = this.getURLSpecFromFile(file);
+    const uri = Services.io.newURI(url);
+    _uc.sss.loadAndRegisterSheet(uri, _uc.sss.AGENT_SHEET);
+  },
   windows: function (fun, onlyBrowsers = true) {
     let windows = Services.wm.getEnumerator(onlyBrowsers ? 'navigator:browser' : null);
     while (windows.hasMoreElements()) {
