@@ -26,11 +26,15 @@
         padding-inline: unset !important;
     }
 
+    #urlbar[breakout][breakout-extend] > #urlbar-background {
+        animation: none !important;
+    }
     /* endregion 禁止地址栏放大 */
 }
 
-/* region FloatingScrollbar.uc.js */
-/*
+/* region FloatingScrollbar.uc.js
+/* Note: this would break websites with modal box or other floating content on the top of scrollable content
+
  @name           FloatingScrollbar.uc.js
  @namespace      nightson1988@gmail.com
  @include        main
@@ -40,7 +44,7 @@
  @note           Thanks to Griever(https://github.com/Griever/userChromeJS/blob/master/SmartScrollbar.uc.js) and Paul Rouget(https://gist.github.com/4003205)
  @note           0.0.3 Fixed a problem of breaking hbox layout
  @note           0.0.2 Remove usage of E4X (https://bugzilla.mozilla.org/show_bug.cgi?id=788293)
- */
+
 @-moz-document regexp("((?!wx2.qq.com).)*") {
     scrollbar {
         -moz-appearance: none !important;
@@ -87,4 +91,4 @@
     }
 }
 
-/* endregion FloatingScrollbar.uc.js */
+ endregion FloatingScrollbar.uc.js */
