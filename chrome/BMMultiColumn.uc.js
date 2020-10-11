@@ -5,14 +5,14 @@
 // @include        main
 // @version        2019.12.23 适配 Firefox 72+
 // @version        2019.2.20 适配 Firefox 57+
-// ==/UserScript== 
+// ==/UserScript==
 
 location.href.startsWith('chrome://browser/content/browser.x') && (function () {
     if (window.BMMultiColumn) {
         window.BMMultiColumn.destroy();
         delete window.BMMultiColumn;
     }
-     
+
     var BMMultiColumn = {
         cachedMenus: [],
         init: function () {
@@ -30,27 +30,27 @@ location.href.startsWith('chrome://browser/content/browser.x') && (function () {
                 pop.removeEventListener('popupshowing', this, false);
                 pop.removeEventListener('click', this, false);
             }
-     
-            var i = 0;
+
+            var i;
             for (i = 0; i < this.cachedMenus.length; i++) {
-                var menu = this.cachedMenus;
+                var menu = this.cachedMenus[i];
                 if (menu && menu._x_inited) {
                     menu._x_scrollbox.width = '';
-                    if( menu._scrollBox && menu._scrollBox.style){
+                    if (menu._scrollBox && menu._scrollBox.style) {
                         menu._scrollBox.style.maxHeight = "";
                     }
-                         
+
                     menu.style.maxWidth = "";
-     
+
                     var container = menu._x_box;
-                    if(container){
+                    if (container) {
                         container.style.minHeight = "";
                         container.style.height = "";
                         container.style.display = "";
                         container.style.flexFlow = "";
                         container.style.overflow = "";
                     }
-     
+
                     delete menu._x_scrollbox;
                     delete menu._x_inited;
                     delete menu._x_box;
@@ -60,21 +60,28 @@ location.href.startsWith('chrome://browser/content/browser.x') && (function () {
         },
         handleEvent: function (event) {
             var menupopup;
-            if (event.target.tagName == 'menu') {
+            if (event.target.tagName === 'menu') {
                 menupopup = event.target.menupopup;
-            } else if (event.target.tagName == 'menupopup') {
+            } else if (event.target.tagName === 'menupopup') {
                 menupopup = event.target;
             } else return;
             if (!menupopup) return;
             //没有初始化或换过位置，重新设置属性
             if (!menupopup.firstChild) return;
-					//console.log(menupopup);
-     
+
             if (!menupopup._x_inited || !menupopup._x_scrollbox.scrollWidth) {
-                var scrollbox = menupopup.shadowRoot.querySelector('[part=arrowscrollbox]');
-  
-                var box = scrollbox.shadowRoot.querySelector('[part=scrollbox]');
-  
+                var scrollbox = menupopup._scrollBox ||
+                        menupopup.shadowRoot.querySelector('[part=arrowscrollbox]');
+
+                var firstMenu = menupopup.firstChild;
+                while (firstMenu) {
+                    if (firstMenu.tagName === "menuitem") break;
+                    firstMenu = firstMenu.nextSibling;
+                }
+
+                var box = firstMenu.parentElement._scrollBox.scrollbox ||
+                        scrollbox.shadowRoot.querySelector('[part=scrollbox]');
+
                 if (box) {
                     menupopup._x_box = box;
                     menupopup._x_scrollbox = scrollbox;
@@ -83,17 +90,14 @@ location.href.startsWith('chrome://browser/content/browser.x') && (function () {
                         this.cachedMenus.push(menupopup);
                     }
                 }
-				// scrollbox.width = 'auto';
+                // scrollbox.width = 'auto';
                 var container = menupopup._x_box;
-                if(container){
+                if (container) {
                     container.style.minHeight = "21px";
                     container.style.height = "auto";
                     container.style.display = "inline-flex";
                     container.style.flexFlow = "column wrap";
-                    //container.style.alignItems = "flex-start";
-                    //container.style.alignContent = "start";
                     container.style.width = "auto";
-                    //container.style.overflow = "auto";
                     container.style.overflow = "-moz-hidden-unscrollable";
                     menupopup._scrollBox.style.maxHeight = "calc(100vh - 129px)";
                 }
@@ -109,13 +113,13 @@ location.href.startsWith('chrome://browser/content/browser.x') && (function () {
                     }
                     menuitem = menuitem.previousSibling;
                 }
-     
+
                 var lastmenu = menupopup.lastChild;
                 while (lastmenu) {
                     if (lastmenu.scrollWidth >= 90) break;
                     lastmenu = lastmenu.previousSibling;
                 }
-     
+
                 if (lastmenu && lastmenu.scrollWidth >= 90) {
                     var pos1 = lastmenu.x - 0 + lastmenu.clientWidth;
                     var pos2 = menupopup._x_box.x - 0 + menupopup._x_box.clientWidth;
@@ -124,22 +128,22 @@ location.href.startsWith('chrome://browser/content/browser.x') && (function () {
                         menupopup._x_scrollbox.width = menupopup._x_box.scrollWidth;
                     }
                 }
-				// 正确的计算顺序，先调整菜单宽度，再设置容器宽度
-                if (!(menupopup._x_scrollbox.clientWidth == menupopup._x_box.scrollWidth)) {
+                // 正确的计算顺序，先调整菜单宽度，再设置容器宽度
+                if (!(menupopup._x_scrollbox.clientWidth === menupopup._x_box.scrollWidth)) {
                     menupopup._x_scrollbox.width = menupopup._x_box.scrollWidth;
                 }
                 //弹出菜单点击bug，要计算两次
                 if (event.type == "click") {
-                   if (!(menupopup._x_scrollbox.clientWidth == menupopup._x_box.scrollWidth)) {
-                       menupopup._x_scrollbox.width = menupopup._x_box.scrollWidth;
-                   }
+                    if (!(menupopup._x_scrollbox.clientWidth === menupopup._x_box.scrollWidth)) {
+                        menupopup._x_scrollbox.width = menupopup._x_box.scrollWidth;
+                    }
                 }
             }
         }
     }
     BMMultiColumn.init();
     window.BMMultiColumn = BMMultiColumn;
-     
+
     function $(id) {
         return document.getElementById(id);
     }
