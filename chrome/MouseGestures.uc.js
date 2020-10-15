@@ -6,11 +6,12 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-09-30 refactor
+// @version              2020-10-15 devicePixelRatio dpi scale support
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
     'use strict';
+    // 鼠标手势颜色
     const GESTURE_COLOR = '#0065FF';
     // 鼠标手势盒子颜色
     const GESTURE_LINE_WIDTH = 4;
@@ -18,7 +19,10 @@
     const GESTURE_BOX_COLOR = 'rgba(0, 0, 0, 0.8)';
     // 鼠标手势箭头线宽
     const GESTURE_ARROW_LINE_WIDTH = 50;
+    // 鼠标手势文本颜色
     const GESTURE_TEXT_COLOR = '#FFFFFF';
+    // 鼠标移动阈值
+    const MOUSE_MOVE_THRESHOLD = 10;
 
     /**
      * Draw an arrow to canvas
@@ -28,7 +32,7 @@
      * @param {number} size
      * @param {string} rotate
      */
-    function drawArrow(ctx, x, y, size, rotate = 'R') {
+    function drawArrow(ctx, x, y, size, rotate) {
         let w = size, h = w;
         ctx.translate(x, y);
         switch (rotate) {
@@ -38,11 +42,11 @@
                 break;
             case 'U':
                 ctx.rotate(-Math.PI / 2);
-                ctx.translate(-w, 0);
+                ctx.translate(-w - (w >> 4), 0);
                 break;
             case 'L':
                 ctx.rotate(Math.PI);
-                ctx.translate(-w, -h);
+                ctx.translate(-w - (w >> 4), -h);
                 break;
             case 'R':
             default:
@@ -96,18 +100,19 @@
         }
         // ctx.closePath();
         ctx.stroke();
-        let boxW = width >> 3, boxH = height >> 3,
+        let boxW = width >> 3,
+                boxH = Math.max(48, height >> 3),
                 midW = (width >> 1),
                 boxX = midW - (boxW >> 1),
                 boxY = (height >> 1) - (boxH >> 1),
-                textH = Math.max(6, boxH >> 2),
+                textH = boxH >> 2,
                 lineH = textH + (textH >> 1),
                 textY = boxY;
         let text = [
             // this.directionChain,
             name || '未知手势'
         ];
-        ctx.font = 'bold ' + textH + 'px sans-serif';
+        ctx.font = textH + 'px sans-serif';
         let textWidthArray = [];
         for (let i = 0, l = text.length, t, w; i < l; i++) {
             t = text[i];
@@ -139,6 +144,12 @@
             w = textWidthArray[i];
             ctx.fillText(t, w, textY);
             textY += lineH;
+        }
+    }
+
+    function log(...args) {
+        if (typeof console !== "undefined" && console.log) {
+            console.log(...args);
         }
     }
 
@@ -199,9 +210,7 @@
             try {
                 document.getElementById('History:UndoCloseTab').doCommand();
             } catch (ex) {
-                if (typeof console !== "undefined" && console.log) {
-                    console.log('恢复关闭的标签', ex);
-                }
+                log('恢复关闭的标签', ex);
                 if ('undoRemoveTab' in gBrowser) {
                     gBrowser.undoRemoveTab();
                 } else {
@@ -296,10 +305,14 @@
                     // noinspection UnusedCatchParameterJS
                     try {
                         // noinspection JSDeprecatedSymbols
-                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.winapi_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
+                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.winapi_abi,
+                                ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t,
+                                ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
                     } catch (ex) {
                         // noinspection JSDeprecatedSymbols
-                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.stdcall_abi, ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
+                        funcSetWindowPos = lib.declare("SetWindowPos", ctypes.stdcall_abi,
+                                ctypes.bool, ctypes.int32_t, ctypes.int32_t, ctypes.int32_t,
+                                ctypes.int32_t, ctypes.int32_t, ctypes.int32_t, ctypes.uint32_t);
                     }
                     var hwndAfter = -2;
                     if (MouseGestureCommand._onTop) {
@@ -310,9 +323,7 @@
                 }
                 lib.close();
             } catch (ex) {
-                if (typeof console !== "undefined" && console.log) {
-                    console.log('MouseGestureCommand::TabStickOnTop', ex);
-                }
+                log('MouseGestureCommand::TabStickOnTop', ex);
             }
         }
 
@@ -447,11 +458,11 @@
             this.events = [
                 'mousedown',
                 'mousemove',
-                'mouseup',
                 'wheel',
                 'keydown'
             ];
             // 鼠标手势列表
+            this.gestures = gestures;
             this.setGestures(gestures);
             // 绘制的鼠标手势中各条线的坐标
             this.savedPath = [];
@@ -463,6 +474,22 @@
              */
             this.xdTrailAreaContext = null;
 
+            /**
+             * 一个 long 整数，请求 ID ，是回调列表中唯一的标识。
+             * 是个非零值，没别的意义。你可以传这个值给 window.cancelAnimationFrame() 以取消回调函数。
+             * @type {number}
+             */
+            this.animationFrameHandle = 0;
+
+            this.animationFrameCallback = () => {
+                try {
+                    // reset animationFrameHandle since it is called
+                    this.animationFrameHandle = 0;
+                    this.draw();
+                } catch (e) {
+                    log('animationFrameCallback', e);
+                }
+            };
         }
 
         setGestures(gestures) {
@@ -500,6 +527,11 @@
                     passive: true
                 });
             }
+            // 鼠标在浏览器其他位置松开
+            window.addEventListener('mouseup', this, {
+                capture: true,
+                passive: true
+            });
             gBrowser.tabpanels.addEventListener('unload', () => this.onUnload(), false);
             window.addEventListener('blur', this);
         }
@@ -518,6 +550,7 @@
             if (mPanelContainer) {
                 mPanelContainer.removeEventListener("mousemove", this, false);
             }
+            window.removeEventListener('mouseup', this, true);
             window.removeEventListener('blur', this);
         }
 
@@ -553,9 +586,7 @@
                     Reflect.set(gBrowser, '__mozIsInGesture', 1);
                     g.cmd();
                 } catch (e) {
-                    if (typeof console !== 'undefined' && console.log) {
-                        console.log(this.directionChain, this.GESTURES[this.directionChain], e);
-                    }
+                    log(this.directionChain, this.gestures[this.directionChain], e);
                 }
                 if (!Reflect.deleteProperty(gBrowser, '__mozIsInGesture')) {
                     Reflect.set(gBrowser, '__mozIsInGesture', 0);
@@ -574,10 +605,21 @@
 
         createCanvas() {
             this.xdTrailArea = document.createXULElement('hbox');
-            let canvas = document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas');
+            let canvas = document.createElementNS(
+                    'http://www.w3.org/1999/xhtml', 'canvas');
             let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
-            canvas.setAttribute('width', clientWidth);
-            canvas.setAttribute('height', clientHeight);
+            let devicePixelRatio = window.devicePixelRatio || 1;
+            if (devicePixelRatio !== 1) {
+                canvas.width = clientWidth * devicePixelRatio;
+                canvas.height = clientHeight * devicePixelRatio;
+                canvas.style.transform = 'scale(' + (1 / devicePixelRatio) + ')';
+                canvas.style.transformOrigin = '0 0';
+            } else {
+                canvas.width = clientWidth;
+                canvas.height = clientHeight;
+            }
+            // canvas.style.width = clientWidth + 'px';
+            // canvas.style.height = clientHeight + 'px';
             this.xdTrailAreaContext = canvas.getContext('2d');
             this.xdTrailArea.style.cssText = `
 -moz-user-focus: none !important;
@@ -621,28 +663,32 @@ z-index: 2147483647 !important;`;
             }
             let [subX, subY] = [event.screenX - this.lastX, event.screenY - this.lastY];
             let [distX, distY] = [(subX > 0 ? subX : (-subX)), (subY > 0 ? subY : (-subY))];
+            let devicePixelRatio = window.devicePixelRatio || 1;
+            let threshold = MOUSE_MOVE_THRESHOLD / devicePixelRatio;
             let direction;
-            if (distX < 10 && distY < 10) return;
+            if (distX < threshold && distY < threshold) return;
             if (distX > distY) direction = subX < 0 ? 'L' : 'R';
             else direction = subY < 0 ? 'U' : 'D';
+
             if (!this.xdTrailArea) {
                 this.createCanvas();
                 this.savedPath = [
-                    this.lastX - gBrowser.selectedBrowser.screenX,
-                    this.lastY - gBrowser.selectedBrowser.screenY
+                    // make it faster by discarding non-integer part
+                    ((this.lastX - gBrowser.selectedBrowser.screenX) * devicePixelRatio) | 0,
+                    ((this.lastY - gBrowser.selectedBrowser.screenY) * devicePixelRatio) | 0
                 ];
             }
             if (this.xdTrailAreaContext) {
                 this.savedPath.push(
-                        event.screenX - gBrowser.selectedBrowser.screenX,
-                        event.screenY - gBrowser.selectedBrowser.screenY);
-                requestAnimationFrame(() => {
-                    try {
-                        this.draw();
-                    } catch (e) {
-                        console.log(e);
-                    }
-                });
+                        ((event.screenX - gBrowser.selectedBrowser.screenX) * devicePixelRatio) | 0,
+                        ((event.screenY - gBrowser.selectedBrowser.screenY) * devicePixelRatio) | 0
+                );
+                // keep only the last animationFrame
+                if (this.animationFrameHandle) {
+                    cancelAnimationFrame(this.animationFrameHandle);
+                }
+                // arrow func, no bind needed
+                this.animationFrameHandle = requestAnimationFrame(this.animationFrameCallback);
                 this.lastX = event.screenX;
                 this.lastY = event.screenY;
             }
