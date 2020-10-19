@@ -138,7 +138,7 @@
             drawArrow(ctx, x, textY, arrowH, directionChain[i]);
             x += arrowH;
         }
-        textY += (textH << 1) + (textH >> 1);
+        textY += (textH << 1) + (textH >> 1) + (textH >> 2);
         for (let i = 0, l = text.length, t, w; i < l; i++) {
             t = text[i];
             w = textWidthArray[i];
@@ -290,7 +290,7 @@
                     Components.utils.import("resource://gre/modules/ctypes.jsm");
                 }
                 var lib = ctypes.open("user32.dll");
-                var funcActiveWindow = 0;
+                var funcActiveWindow;
                 // noinspection UnusedCatchParameterJS
                 try {
                     // noinspection JSDeprecatedSymbols
