@@ -90,8 +90,8 @@
         const {width, height} = ctx.canvas;
         ctx.clearRect(0, 0, width, height);
         ctx.strokeStyle = GESTURE_COLOR;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
+        ctx.lineJoin = 'bevel';
+        ctx.lineCap = 'butt';
         ctx.lineWidth = GESTURE_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(savedPath[0], savedPath[1]);
@@ -290,7 +290,7 @@
                     Components.utils.import("resource://gre/modules/ctypes.jsm");
                 }
                 var lib = ctypes.open("user32.dll");
-                var funcActiveWindow;
+                var funcActiveWindow = 0;
                 // noinspection UnusedCatchParameterJS
                 try {
                     // noinspection JSDeprecatedSymbols
