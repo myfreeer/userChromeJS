@@ -129,13 +129,16 @@
             boxX = midW - (boxW >> 1);
         }
         ctx.fillStyle = GESTURE_BOX_COLOR;
-        ctx.fillRect(boxX, boxY, boxW, boxH);
+        ctx.fillRect(Math.max(boxX, 0), boxY, Math.min(boxW, width), boxH);
         ctx.fillStyle = GESTURE_TEXT_COLOR;
         textY += (textH >> 1);
         ctx.lineWidth = GESTURE_ARROW_LINE_WIDTH;
         ctx.strokeStyle = GESTURE_TEXT_COLOR;
         for (let i = 0, l = directionChain.length, x = midW - (arrowW >> 1); i < l; i++) {
-            drawArrow(ctx, x, textY, arrowH, directionChain[i]);
+            // only draw visible arrows
+            if (x + arrowH >= 0 && x <= width) {
+                drawArrow(ctx, x, textY, arrowH, directionChain[i]);
+            }
             x += arrowH;
         }
         textY += (textH << 1) + (textH >> 1) + (textH >> 2);
