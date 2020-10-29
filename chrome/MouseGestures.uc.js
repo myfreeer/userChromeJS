@@ -440,6 +440,8 @@
 
         'W+': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
         'W-': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
+        'WR': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
+        'WL': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
     };
 
     class UcMouseGesture {
@@ -725,7 +727,21 @@ z-index: 2147483647 !important;`;
             }
             // this.shouldFireContext = false;
             this.hideFireContext = true;
-            this.directionChain = 'W' + (event.deltaY > 0 ? '+' : '-');
+            let direction;
+            if (event.deltaY) {
+                // 纵向滚动
+                direction = (event.deltaY > 0 ? '+' : '-');
+            } else if (event.deltaX) {
+                // 横向滚动
+                direction = (event.deltaX > 0 ? 'R' : 'L');
+            } else if (event.deltaZ) {
+                // 滚轮的z轴方向上的滚动
+                direction = (event.deltaZ > 0 ? 'U' : 'D');
+            } else {
+                this.endGesture();
+                return;
+            }
+            this.directionChain = 'W' + direction;
             this.stopGesture();
         }
 
