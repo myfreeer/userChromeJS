@@ -183,18 +183,35 @@ var autselectpsearchbar = document.getElementById("searchbar");
     function monkeyPatchInsertTabAtIndexByTabPlus(tab, params = {}) {
         // console.log(tab, params);
         let {
-            // bulkOrderedOpen,
+            bulkOrderedOpen,
             index,
             openerTab,
             ownerTab,
-            // pinned,
+            pinned,
         } = params;
         let {selectedTab} = gBrowser;
         // 在当前标签页打开标签
-        if (ownerTab === selectedTab && ownerTab === openerTab && typeof index === 'number') {
+        if (!bulkOrderedOpen &&
+                ownerTab === selectedTab &&
+                ownerTab === openerTab &&
+                typeof index === 'number') {
+            // 在当前标签页右侧打开新标签页
+            params.index = selectedTab._tPos + 1;
+            // 鼠标中键打开
+        } else if (index === undefined &&
+                openerTab === selectedTab &&
+                !bulkOrderedOpen && !pinned) {
             // 在当前标签页右侧打开新标签页
             params.index = selectedTab._tPos + 1;
         }
+        /*
+        恢复关闭的标签页：
+        bulkOrderedOpen: undefined
+        index: number
+        openerTab: false
+        ownerTab: undefined
+        pinned: undefined
+         */
         return superInsertTabAtIndex.call(this, tab, params);
     }
 
