@@ -6,7 +6,7 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-11-13 devicePixelRatio dpi scale support
+// @version              2020-11-19
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
@@ -17,8 +17,6 @@
     const GESTURE_LINE_WIDTH = 4;
     // 鼠标手势盒子颜色
     const GESTURE_BOX_COLOR = 'rgba(0, 0, 0, 0.8)';
-    // 鼠标手势箭头线宽
-    const GESTURE_ARROW_LINE_WIDTH = 50;
     // 鼠标手势文本颜色
     const GESTURE_TEXT_COLOR = '#FFFFFF';
     // 鼠标移动阈值
@@ -31,61 +29,54 @@
      */
     function createPathOfArrow() {
         const path = new Path2D();
-        path.moveTo(1013, 480);
-        path.lineTo(678, 145);
-        path.bezierCurveTo(664, 131, 640, 131, 626, 145);
-        path.lineTo(609, 162);
-        path.bezierCurveTo(594, 177, 594, 200, 609, 215);
-        path.lineTo(848, 454);
-        path.lineTo(255, 454);
-        path.bezierCurveTo(226, 454, 203, 478, 203, 506);
-        path.bezierCurveTo(203, 535, 226, 559, 255, 559);
-        path.lineTo(848, 559);
-        path.lineTo(608, 798);
-        path.bezierCurveTo(594, 813, 594, 836, 608, 850);
-        path.lineTo(625, 867);
-        path.bezierCurveTo(640, 882, 663, 882, 677, 867);
-        path.lineTo(1012, 532);
-        path.bezierCurveTo(1027, 518, 1027, 495, 1013, 480);
-        path.closePath();
+        path.lineTo(89,534);
+        path.bezierCurveTo(70,515,70,485,89,466);
+        path.lineTo(478,78);
+        path.bezierCurveTo(496,59,527,59,545,78);
+        path.lineTo(934,466);
+        path.bezierCurveTo(953,485,953,515,934,534);
+        path.lineTo(890,578);
+        path.bezierCurveTo(871,597,840,597,821,578);
+        path.lineTo(592,337);
+        path.lineTo(592,912);
+        path.bezierCurveTo(592,938,570,960,544,960);
+        path.lineTo(480,960);
+        path.bezierCurveTo(453,960,432,938,432,912);
+        path.lineTo(432,337);
+        path.lineTo(202,578);
+        path.bezierCurveTo(183,597,152,598,133,579);
         return path;
     }
 
     /**
-     * Draw an arrow to canvas
-     * @param {CanvasRenderingContext2D} ctx
-     * @param {number} x
-     * @param {number} y
+     * @param {Path2D} path
      * @param {number} size
      * @param {string} rotate
      */
-    function drawArrow(ctx, x, y, size, rotate) {
-        let w = size, h = w;
-        ctx.translate(x, y);
+    function transformPathOfArrow(path, size, rotate) {
+        const domMatrix = new DOMMatrix();
         switch (rotate) {
             case 'D':
-                ctx.rotate(Math.PI / 2);
-                ctx.translate(-w >> 3, -h);
-                break;
-            case 'U':
-                ctx.rotate(-Math.PI / 2);
-                ctx.translate(-w - (w >> 4), 0);
-                break;
-            case 'L':
-                ctx.rotate(Math.PI);
-                ctx.translate(-w - (w >> 4), -h);
+                // in degrees
+                domMatrix.translateSelf(size, size);
+                domMatrix.rotateSelf(180);
                 break;
             case 'R':
+                domMatrix.translateSelf(size, 0);
+                domMatrix.rotateSelf(90);
+                break;
+            case 'L':
+                domMatrix.translateSelf(0, size);
+                domMatrix.rotateSelf(-90);
+                break;
+            case 'U':
             default:
-                ctx.translate(-w >> 3, 0);
                 break;
         }
-        ctx.scale(w / 1024, h / 1024);
-        ctx.fill(PATH_OF_ARROW);
-        ctx.stroke(PATH_OF_ARROW);
-
-        // reset current transformation matrix to the identity matrix
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        domMatrix.scaleSelf(size / 1024, size / 1024);
+        let path2D = new Path2D();
+        path2D.addPath(path, domMatrix);
+        return path2D;
 
     }
 
@@ -93,7 +84,7 @@
      * @param {CanvasRenderingContext2D} ctx
      * @param {number[] | Path2D} path
      * @param {string} directionChain
-     * @param {string} name
+     * @param {string?} name
      */
     function drawGesture(ctx, path, directionChain, name) {
         const {width, height} = ctx.canvas;
@@ -145,12 +136,19 @@
         ctx.fillRect(Math.max(boxX, 0), boxY, Math.min(boxW, width), boxH);
         ctx.fillStyle = GESTURE_TEXT_COLOR;
         textY += (textH >> 1);
-        ctx.lineWidth = GESTURE_ARROW_LINE_WIDTH;
         ctx.strokeStyle = GESTURE_TEXT_COLOR;
-        for (let i = 0, l = directionChain.length, x = midW - (arrowW >> 1); i < l; i++) {
+        const arrowPathCache = {};
+        for (let i = 0, l = directionChain.length, x = midW - (arrowW >> 1), d; i < l; i++) {
             // only draw visible arrows
             if (x + arrowH >= 0 && x <= width) {
-                drawArrow(ctx, x, textY, arrowH, directionChain[i]);
+                d = directionChain[i];
+                if (!arrowPathCache[d]) {
+                    arrowPathCache[d] = transformPathOfArrow(PATH_OF_ARROW, arrowH, d);
+                }
+                ctx.translate(x, textY);
+                ctx.fill(arrowPathCache[d]);
+                // reset current transformation matrix to the identity matrix
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
             }
             x += arrowH;
         }
@@ -533,11 +531,12 @@
 
             this.animationFrameCallback = () => {
                 try {
-                    // reset animationFrameHandle since it is called
-                    this.animationFrameHandle = 0;
                     this.draw();
                 } catch (e) {
                     log('animationFrameCallback', e);
+                } finally {
+                    // reset animationFrameHandle since it is called
+                    this.animationFrameHandle = 0;
                 }
             };
         }
@@ -702,8 +701,7 @@ z-index: 2147483647 !important;`;
                 [this.lastX, this.lastY, this.directionChain] = [event.screenX, event.screenY, ''];
             }
             if (event.button === 0) {
-                this.isMouseDownR = false;
-                this.stopGesture();
+                this.endGesture();
             }
         }
 
@@ -736,12 +734,12 @@ z-index: 2147483647 !important;`;
                         ((this.lastX - screenX) * devicePixelRatio) | 0,
                         ((this.lastY - screenY) * devicePixelRatio) | 0
                 );
-                // keep only the last animationFrame
-                if (this.animationFrameHandle) {
-                    cancelAnimationFrame(this.animationFrameHandle);
+                // requestAnimationFrame only if last AnimationFrame finished
+                if (!this.animationFrameHandle) {
+                    // arrow func, no bind needed
+                    this.animationFrameHandle =
+                            requestAnimationFrame(this.animationFrameCallback);
                 }
-                // arrow func, no bind needed
-                this.animationFrameHandle = requestAnimationFrame(this.animationFrameCallback);
                 this.lastX = event.screenX;
                 this.lastY = event.screenY;
             }
