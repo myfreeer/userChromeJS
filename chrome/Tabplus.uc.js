@@ -12,7 +12,6 @@
 // @include        chrome://browser/content/browser.xul
 // ==/UserScript==
 
-
 // 01. 自动切换到鼠标移动到的标签页
 /*((g, w) => {
   class TabPlus {
@@ -67,14 +66,19 @@ gBrowser.tabContainer.addEventListener("dblclick", function (event) {
         return;
     const scrollRight = true;
     const wrap = true;
-    gBrowser.tabContainer.addEventListener("wheel", function (event) {
+    let totalDir = 0;
+    gBrowser.tabContainer.addEventListener("wheel",function (event) {
         event.stopImmediatePropagation();
         event.preventDefault();
         let dir = (scrollRight ? 1 : -1) * Math.sign(event.deltaY);
+        totalDir += dir;
         setTimeout(function () {
-            gBrowser.tabContainer.advanceSelectedTab(dir, wrap);
-        }, 0);
+            if (totalDir === 0) return;
+            gBrowser.tabContainer.advanceSelectedTab(totalDir, wrap);
+            totalDir = 0;
+        }, 5);
     }, true);
+
 })();
 
 
@@ -219,16 +223,16 @@ var autselectpsearchbar = document.getElementById("searchbar");
 
 })();
 
-//11.  关闭当前标签页后选择左侧标签
+// 11. 关闭当前标签页后选择左侧标签
 (function () {
     if (!location.href.startsWith('chrome://browser/content/browser.x'))
         return;
     // monkey-patch for more information
     const {removeTab: superRemoveTab} = gBrowser;
-    gBrowser.removeTab = monkeyPatchRemoveTabByTabPlus;
+    gBrowser.removeTab = removeTabAndAdvanceLeftTab;
 
     // https://github.com/mozilla/gecko-dev/blob/969fc7fa6c3c7fc489f53b7b7f8c902028b5169f/browser/base/content/tabbrowser.js
-    function monkeyPatchRemoveTabByTabPlus(tab, params = {}) {
+    function removeTabAndAdvanceLeftTab(tab, params = {}) {
         // console.log(tab, params);
         let {selectedTab} = gBrowser;
         // see MouseGestures.uc.js
@@ -243,5 +247,33 @@ var autselectpsearchbar = document.getElementById("searchbar");
         return superRemoveTab.call(this, tab, params);
     }
 
-    monkeyPatchRemoveTabByTabPlus._superFunction = superRemoveTab;
+    removeTabAndAdvanceLeftTab._superFunction = superRemoveTab;
+})();
+
+// 12. 关闭最后一个标签页时，如果最后一个标签页是新标签页，关闭窗口
+(function () {
+    if (!location.href.startsWith('chrome://browser/content/browser.x'))
+        return;
+    const PERF_CLOSE_WINDOW_WITH_LAST_TAB = 'browser.tabs.closeWindowWithLastTab';
+    const BROWSER_NEW_TAB_URL = 'about:newtab';
+
+    // monkey-patch for more information
+    const {removeTab: superRemoveTab} = gBrowser;
+    gBrowser.removeTab = removeTabAndCloseWindowIfLastTabIsNewTab;
+
+    function removeTabAndCloseWindowIfLastTabIsNewTab(tab, params = {}) {
+        // 关闭最后一个标签页时
+        if (gBrowser.tabs.length === 1 && gBrowser.tabs[0] === tab && tab.linkedBrowser &&
+                // 如果最后一个标签页是新标签页
+                tab.linkedBrowser.documentURI.spec === BROWSER_NEW_TAB_URL &&
+                tab.linkedBrowser.currentURI.spec === BROWSER_NEW_TAB_URL &&
+                // 并且配置了关闭最后一个标签页时不关闭窗口
+                !Services.prefs.getBoolPref(PERF_CLOSE_WINDOW_WITH_LAST_TAB)) {
+            // 关闭窗口
+            params.closeWindowWithLastTab = true;
+        }
+        return superRemoveTab.call(this, tab, params);
+    }
+
+    removeTabAndCloseWindowIfLastTabIsNewTab._superFunction = superRemoveTab;
 })();
