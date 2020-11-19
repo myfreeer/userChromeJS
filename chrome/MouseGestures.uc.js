@@ -6,7 +6,7 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-10-15 devicePixelRatio dpi scale support
+// @version              2020-11-13 devicePixelRatio dpi scale support
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
@@ -23,6 +23,33 @@
     const GESTURE_TEXT_COLOR = '#FFFFFF';
     // 鼠标移动阈值
     const MOUSE_MOVE_THRESHOLD = 10;
+    // 箭头
+    const PATH_OF_ARROW = createPathOfArrow();
+
+    /**
+     * @return {Path2D}
+     */
+    function createPathOfArrow() {
+        const path = new Path2D();
+        path.moveTo(1013, 480);
+        path.lineTo(678, 145);
+        path.bezierCurveTo(664, 131, 640, 131, 626, 145);
+        path.lineTo(609, 162);
+        path.bezierCurveTo(594, 177, 594, 200, 609, 215);
+        path.lineTo(848, 454);
+        path.lineTo(255, 454);
+        path.bezierCurveTo(226, 454, 203, 478, 203, 506);
+        path.bezierCurveTo(203, 535, 226, 559, 255, 559);
+        path.lineTo(848, 559);
+        path.lineTo(608, 798);
+        path.bezierCurveTo(594, 813, 594, 836, 608, 850);
+        path.lineTo(625, 867);
+        path.bezierCurveTo(640, 882, 663, 882, 677, 867);
+        path.lineTo(1012, 532);
+        path.bezierCurveTo(1027, 518, 1027, 495, 1013, 480);
+        path.closePath();
+        return path;
+    }
 
     /**
      * Draw an arrow to canvas
@@ -54,26 +81,8 @@
                 break;
         }
         ctx.scale(w / 1024, h / 1024);
-        ctx.beginPath();
-        ctx.moveTo(1013, 480);
-        ctx.lineTo(678, 145);
-        ctx.bezierCurveTo(664, 131, 640, 131, 626, 145);
-        ctx.lineTo(609, 162);
-        ctx.bezierCurveTo(594, 177, 594, 200, 609, 215);
-        ctx.lineTo(848, 454);
-        ctx.lineTo(255, 454);
-        ctx.bezierCurveTo(226, 454, 203, 478, 203, 506);
-        ctx.bezierCurveTo(203, 535, 226, 559, 255, 559);
-        ctx.lineTo(848, 559);
-        ctx.lineTo(608, 798);
-        ctx.bezierCurveTo(594, 813, 594, 836, 608, 850);
-        ctx.lineTo(625, 867);
-        ctx.bezierCurveTo(640, 882, 663, 882, 677, 867);
-        ctx.lineTo(1012, 532);
-        ctx.bezierCurveTo(1027, 518, 1027, 495, 1013, 480);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        ctx.fill(PATH_OF_ARROW);
+        ctx.stroke(PATH_OF_ARROW);
 
         // reset current transformation matrix to the identity matrix
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -82,24 +91,28 @@
 
     /**
      * @param {CanvasRenderingContext2D} ctx
-     * @param {number[]} savedPath
+     * @param {number[] | Path2D} path
      * @param {string} directionChain
      * @param {string} name
      */
-    function drawGesture(ctx, savedPath, directionChain, name) {
+    function drawGesture(ctx, path, directionChain, name) {
         const {width, height} = ctx.canvas;
         ctx.clearRect(0, 0, width, height);
         ctx.strokeStyle = GESTURE_COLOR;
         ctx.lineJoin = 'bevel';
         ctx.lineCap = 'butt';
         ctx.lineWidth = GESTURE_LINE_WIDTH;
-        ctx.beginPath();
-        ctx.moveTo(savedPath[0], savedPath[1]);
-        for (let i = 2, l = savedPath.length; i < l;) {
-            ctx.lineTo(savedPath[i++], savedPath[i++]);
+        if (path instanceof Path2D) {
+            ctx.stroke(path);
+        } else if (Array.isArray(path)) {
+            ctx.beginPath();
+            ctx.moveTo(path[0], path[1]);
+            for (let i = 2, l = path.length; i < l;) {
+                ctx.lineTo(path[i++], path[i++]);
+            }
+            // ctx.closePath();
+            ctx.stroke();
         }
-        // ctx.closePath();
-        ctx.stroke();
         let boxW = width >> 3,
                 boxH = Math.max(48, height >> 3),
                 midW = (width >> 1),
@@ -109,8 +122,8 @@
                 lineH = textH + (textH >> 1),
                 textY = boxY;
         let text = [
-            // this.directionChain,
-            name || '未知手势'
+            // directionChain,
+            name || ('未知手势: ' + directionChain)
         ];
         ctx.font = textH + 'px sans-serif';
         let textWidthArray = [];
@@ -230,6 +243,32 @@
         // 激活右边的标签页
         static advanceRightTab() {
             gBrowser.tabContainer.advanceSelectedTab(1, true);
+        }
+
+        // 滚动到左边的标签页
+        static scrollLeftTab() {
+            if (!('__scrollTabPos' in MouseGestureCommand)) {
+                MouseGestureCommand.__scrollTabPos = 0;
+            }
+            MouseGestureCommand.__scrollTabPos -= 1;
+            setTimeout(() => {
+                if (!MouseGestureCommand.__scrollTabPos) return;
+                gBrowser.tabContainer.advanceSelectedTab(MouseGestureCommand.__scrollTabPos, true);
+                MouseGestureCommand.__scrollTabPos = 0;
+            }, 5);
+        }
+
+        // 滚动到右边的标签页
+        static scrollRightTab() {
+            if (!('__scrollTabPos' in MouseGestureCommand)) {
+                MouseGestureCommand.__scrollTabPos = 0;
+            }
+            MouseGestureCommand.__scrollTabPos += 1;
+            setTimeout(() => {
+                if (!MouseGestureCommand.__scrollTabPos) return;
+                gBrowser.tabContainer.advanceSelectedTab(MouseGestureCommand.__scrollTabPos, true);
+                MouseGestureCommand.__scrollTabPos = 0;
+            }, 5);
         }
 
         // 激活第一个标签页
@@ -441,10 +480,10 @@
             cmd: MouseGestureCommand.closeCurrentTabAndGotoRightTab
         },
 
-        'W+': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
-        'W-': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
-        'WR': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
-        'WL': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
+        'W+': {name: '激活右边的标签页', cmd: MouseGestureCommand.scrollRightTab},
+        'W-': {name: '激活左边的标签页', cmd: MouseGestureCommand.scrollLeftTab},
+        'WR': {name: '激活右边的标签页', cmd: MouseGestureCommand.scrollRightTab},
+        'WL': {name: '激活左边的标签页', cmd: MouseGestureCommand.scrollLeftTab},
     };
 
     class UcMouseGesture {
@@ -469,13 +508,19 @@
             // 鼠标手势列表
             this.gestures = gestures;
             this.setGestures(gestures);
-            // 绘制的鼠标手势中各条线的坐标
-            this.savedPath = [];
-            // 绘制鼠标手势的canvas的容器
+            /**
+             * 绘制的鼠标手势中各条线的坐标
+             * @type {Path2D | null}
+             */
+            this.mouseMovePath = null;
+            /**
+             * 绘制鼠标手势的canvas的容器
+             * @type {HTMLCanvasElement | null}
+             */
             this.xdTrailArea = null;
             /**
              * 绘制鼠标手势的canvas的 CanvasRenderingContext2D
-             * @type CanvasRenderingContext2D | null
+             * @type {CanvasRenderingContext2D | null}
              */
             this.xdTrailAreaContext = null;
 
@@ -567,13 +612,13 @@
             if (!(ctx = this.xdTrailAreaContext)) {
                 return;
             }
-            let {savedPath} = this;
+            let {mouseMovePath} = this;
             this.hideFireContext = true;
-            if (!savedPath || !savedPath.length || (savedPath.length & 1)) {
+            if (!mouseMovePath) {
                 return;
             }
             let g = this.gestures[this.directionChain];
-            drawGesture(ctx, savedPath, this.directionChain, g && g.name);
+            drawGesture(ctx, mouseMovePath, this.directionChain, g && g.name);
         }
 
         endGesture() {
@@ -601,7 +646,7 @@
                 this.xdTrailArea.parentNode.removeChild(this.xdTrailArea);
                 this.xdTrailArea = null;
                 this.xdTrailAreaContext = null;
-                this.savedPath = [];
+                this.mouseMovePath = null;
             }
             this.directionChain = '';
             setTimeout(() => StatusPanel._label = '', 2000);
@@ -668,6 +713,7 @@ z-index: 2147483647 !important;`;
             }
             let [subX, subY] = [event.screenX - this.lastX, event.screenY - this.lastY];
             let [distX, distY] = [(subX > 0 ? subX : (-subX)), (subY > 0 ? subY : (-subY))];
+            const {screenX, screenY} = gBrowser.selectedBrowser;
             let devicePixelRatio = window.devicePixelRatio || 1;
             let threshold = MOUSE_MOVE_THRESHOLD / devicePixelRatio;
             let direction;
@@ -677,16 +723,18 @@ z-index: 2147483647 !important;`;
 
             if (!this.xdTrailArea) {
                 this.createCanvas();
-                this.savedPath = [
-                    // make it faster by discarding non-integer part
-                    ((this.lastX - gBrowser.selectedBrowser.screenX) * devicePixelRatio) | 0,
-                    ((this.lastY - gBrowser.selectedBrowser.screenY) * devicePixelRatio) | 0
-                ];
+                this.mouseMovePath = new Path2D();
+                this.mouseMovePath.moveTo(
+                        // make it faster by discarding non-integer part
+                        ((this.lastX - screenX) * devicePixelRatio) | 0,
+                        ((this.lastY - screenY) * devicePixelRatio) | 0
+                );
             }
             if (this.xdTrailAreaContext) {
-                this.savedPath.push(
-                        ((event.screenX - gBrowser.selectedBrowser.screenX) * devicePixelRatio) | 0,
-                        ((event.screenY - gBrowser.selectedBrowser.screenY) * devicePixelRatio) | 0
+                this.mouseMovePath.lineTo(
+                        // make it faster by discarding non-integer part
+                        ((this.lastX - screenX) * devicePixelRatio) | 0,
+                        ((this.lastY - screenY) * devicePixelRatio) | 0
                 );
                 // keep only the last animationFrame
                 if (this.animationFrameHandle) {
@@ -702,7 +750,7 @@ z-index: 2147483647 !important;`;
                 let g = this.gestures[this.directionChain];
                 StatusPanel._label = g ?
                         '手势: ' + this.directionChain + ' ' + g.name :
-                        '未知手势:' + this.directionChain;
+                        '未知手势: ' + this.directionChain;
             }
         }
 
