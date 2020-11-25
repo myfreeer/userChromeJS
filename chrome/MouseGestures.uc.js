@@ -6,7 +6,7 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-11-19
+// @version              2020-11-25
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
@@ -731,8 +731,8 @@ z-index: 2147483647 !important;`;
             if (this.xdTrailAreaContext) {
                 this.mouseMovePath.lineTo(
                         // make it faster by discarding non-integer part
-                        ((this.lastX - screenX) * devicePixelRatio) | 0,
-                        ((this.lastY - screenY) * devicePixelRatio) | 0
+                        ((event.screenX - screenX) * devicePixelRatio) | 0,
+                        ((event.screenY - screenY) * devicePixelRatio) | 0
                 );
                 // requestAnimationFrame only if last AnimationFrame finished
                 if (!this.animationFrameHandle) {
