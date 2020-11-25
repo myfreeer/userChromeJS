@@ -54,7 +54,9 @@
 
     // region 工具栏增加附加组件选项菜单
     const toolbarContextMenu = document.getElementById('toolbar-context-menu');
-    if (toolbarContextMenu && window.ToolbarContextMenu) {
+    if (toolbarContextMenu && window.ToolbarContextMenu &&
+            // already patched??
+            !ToolbarContextMenu.openExtensionOption) {
         const {updateExtension} = ToolbarContextMenu;
         ToolbarContextMenu.updateExtension = async function patchUpdateExtension(popup) {
             const returnValue = await updateExtension.call(this, popup);
@@ -99,8 +101,11 @@
 
     // region 书签栏增加添加书签到此处
     const bookmarkContextMenu = document.getElementById('placesContext');
-    if (bookmarkContextMenu && window.PlacesUIUtils && window.PlacesUtils) {
-        const getViewForNode = PlacesUIUtils.getViewForNode;
+    if (bookmarkContextMenu && window.PlacesUIUtils &&
+            window.PlacesUtils &&
+            // already patched??
+            !PlacesUIUtils.addBookmarkToHere) {
+        const placesContextShowing = PlacesUIUtils.placesContextShowing;
         // 书签栏右键菜单使用的 ID 不能通过常规的 querySelector 方式获取
         const queryChildren = (node, id) => {
             let c = node.children;
@@ -110,9 +115,13 @@
                 }
             }
         };
-        PlacesUIUtils.getViewForNode = function patchGetViewForNode(node) {
-            const view = getViewForNode.call(this, node);
-            const isDir = view && node && node._placesNode &&
+        PlacesUIUtils.placesContextShowing = function patchPlacesContextShowing(event) {
+            const ret = placesContextShowing.call(this, event);
+            if (!ret) {
+                return ret;
+            }
+            const node = document.popupNode;
+            const isDir = node && node._placesNode &&
                     node._placesNode.bookmarkGuid &&
                     node.getAttribute('container');
             let newBookmarkHere =
@@ -133,7 +142,7 @@
             } else if (newBookmarkHere) {
                 newBookmarkHere.hidden = true;
             }
-            return view;
+            return ret;
         };
         PlacesUIUtils.addBookmarkToHere = async function addBookmarkToHere(popupNode) {
             if (!popupNode ||
@@ -142,8 +151,10 @@
                     !popupNode.getAttribute('container')) {
                 return;
             }
-
-            let browser = gBrowser.selectedBrowser;
+            // fix multiple window
+            const globalThat = popupNode.ownerGlobal || window;
+            let browser = globalThat.gBrowser?.selectedBrowser;
+            if (!browser) return;
             if (browser.documentURI) {
                 let isErrorPage = /^about:(neterror|certerror|blocked)/.test(
                         browser.documentURI.spec
@@ -152,7 +163,7 @@
                     return;
                 }
             }
-            let url = new URL(browser.currentURI.spec);
+            let url = new globalThat.URL(browser.currentURI.spec);
 
             let info = {
                 url,
@@ -162,15 +173,15 @@
             let charset = browser.characterSet;
             info.title = info.title || url.href;
 
-            info.guid = await PlacesTransactions.NewBookmark(info).transact();
+            info.guid = await globalThat.PlacesTransactions.NewBookmark(info).transact();
 
             if (charset) {
-                PlacesUIUtils.setCharsetForPage(url, charset, window).catch(
+                globalThat.PlacesUIUtils.setCharsetForPage(url, charset, window).catch(
                         Cu.reportError
                 );
             }
 
-            StarUI.showConfirmation();
+            globalThat.StarUI.showConfirmation();
         };
 
     }
