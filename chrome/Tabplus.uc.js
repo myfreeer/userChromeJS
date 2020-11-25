@@ -255,7 +255,7 @@ var autselectpsearchbar = document.getElementById("searchbar");
     if (!location.href.startsWith('chrome://browser/content/browser.x'))
         return;
     const PERF_CLOSE_WINDOW_WITH_LAST_TAB = 'browser.tabs.closeWindowWithLastTab';
-    const BROWSER_NEW_TAB_URL = 'about:newtab';
+    const BROWSER_NEW_TAB_URL = new Set(['about:newtab', 'about:privatebrowsing']);
 
     // monkey-patch for more information
     const {removeTab: superRemoveTab} = gBrowser;
@@ -265,8 +265,8 @@ var autselectpsearchbar = document.getElementById("searchbar");
         // 关闭最后一个标签页时
         if (gBrowser.tabs.length === 1 && gBrowser.tabs[0] === tab && tab.linkedBrowser &&
                 // 如果最后一个标签页是新标签页
-                tab.linkedBrowser.documentURI.spec === BROWSER_NEW_TAB_URL &&
-                tab.linkedBrowser.currentURI.spec === BROWSER_NEW_TAB_URL &&
+                BROWSER_NEW_TAB_URL.has(tab.linkedBrowser.documentURI.spec) &&
+                BROWSER_NEW_TAB_URL.has(tab.linkedBrowser.currentURI.spec) &&
                 // 并且配置了关闭最后一个标签页时不关闭窗口
                 !Services.prefs.getBoolPref(PERF_CLOSE_WINDOW_WITH_LAST_TAB)) {
             // 关闭窗口
