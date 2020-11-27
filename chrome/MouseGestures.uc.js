@@ -6,52 +6,62 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-11-25
+// @version              2020-11-27
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
     'use strict';
-    // 鼠标手势颜色
-    const GESTURE_COLOR = '#0065FF';
-    // 鼠标手势盒子颜色
-    const GESTURE_LINE_WIDTH = 4;
-    // 鼠标手势盒子颜色
-    const GESTURE_BOX_COLOR = 'rgba(0, 0, 0, 0.8)';
-    // 鼠标手势文本颜色
-    const GESTURE_TEXT_COLOR = '#FFFFFF';
-    // 鼠标移动阈值
-    const MOUSE_MOVE_THRESHOLD = 10;
-    // 箭头
-    const PATH_OF_ARROW = createPathOfArrow();
+    /// region utils
+    function weakAssign(target, source) {
+        if (!source) return target;
+        if (!target) return source;
+        for (const key in source) {
+            if (source.hasOwnProperty(key) && !(key in target)) {
+                target[key] = source[key];
+            }
+        }
+    }
+
+    function log(...args) {
+        if (typeof console !== "undefined" && console.log) {
+            console.log(...args);
+        }
+    }
+    /// endregion utils
+
+    /// region renderer
 
     /**
+     * 创建箭头路径
      * @return {Path2D}
      */
     function createPathOfArrow() {
         const path = new Path2D();
-        path.lineTo(89,534);
-        path.bezierCurveTo(70,515,70,485,89,466);
-        path.lineTo(478,78);
-        path.bezierCurveTo(496,59,527,59,545,78);
-        path.lineTo(934,466);
-        path.bezierCurveTo(953,485,953,515,934,534);
-        path.lineTo(890,578);
-        path.bezierCurveTo(871,597,840,597,821,578);
-        path.lineTo(592,337);
-        path.lineTo(592,912);
-        path.bezierCurveTo(592,938,570,960,544,960);
-        path.lineTo(480,960);
-        path.bezierCurveTo(453,960,432,938,432,912);
-        path.lineTo(432,337);
-        path.lineTo(202,578);
-        path.bezierCurveTo(183,597,152,598,133,579);
+        path.lineTo(89, 534);
+        path.bezierCurveTo(70, 515, 70, 485, 89, 466);
+        path.lineTo(478, 78);
+        path.bezierCurveTo(496, 59, 527, 59, 545, 78);
+        path.lineTo(934, 466);
+        path.bezierCurveTo(953, 485, 953, 515, 934, 534);
+        path.lineTo(890, 578);
+        path.bezierCurveTo(871, 597, 840, 597, 821, 578);
+        path.lineTo(592, 337);
+        path.lineTo(592, 912);
+        path.bezierCurveTo(592, 938, 570, 960, 544, 960);
+        path.lineTo(480, 960);
+        path.bezierCurveTo(453, 960, 432, 938, 432, 912);
+        path.lineTo(432, 337);
+        path.lineTo(202, 578);
+        path.bezierCurveTo(183, 597, 152, 598, 133, 579);
         return path;
     }
 
     /**
-     * @param {Path2D} path
-     * @param {number} size
-     * @param {string} rotate
+     * 变换箭头路径
+     * @param {Path2D} path 箭头路径
+     * @param {number} size 目标大小
+     * @param {string} rotate 方向
+     * @return {Path2D}
      */
     function transformPathOfArrow(path, size, rotate) {
         const domMatrix = new DOMMatrix();
@@ -77,95 +87,510 @@
         let path2D = new Path2D();
         path2D.addPath(path, domMatrix);
         return path2D;
-
     }
 
     /**
-     * @param {CanvasRenderingContext2D} ctx
-     * @param {number[] | Path2D} path
-     * @param {string} directionChain
-     * @param {string?} name
+     * 默认渲染器配置
      */
-    function drawGesture(ctx, path, directionChain, name) {
-        const {width, height} = ctx.canvas;
-        ctx.clearRect(0, 0, width, height);
-        ctx.strokeStyle = GESTURE_COLOR;
-        ctx.lineJoin = 'bevel';
-        ctx.lineCap = 'butt';
-        ctx.lineWidth = GESTURE_LINE_WIDTH;
-        if (path instanceof Path2D) {
-            ctx.stroke(path);
-        } else if (Array.isArray(path)) {
-            ctx.beginPath();
-            ctx.moveTo(path[0], path[1]);
-            for (let i = 2, l = path.length; i < l;) {
-                ctx.lineTo(path[i++], path[i++]);
-            }
-            // ctx.closePath();
-            ctx.stroke();
+    const defaultMouseGestureRendererConfig = {
+        // 鼠标手势颜色
+        gestureColor: '#0065ff',
+        // 鼠标手势线宽
+        gestureLineWidth: 4,
+        // 鼠标手势盒子颜色
+        gestureBoxColor: 'rgba(0, 0, 0, 0.8)',
+        // 鼠标手势文本颜色
+        gestureTextColor: '#ffffff',
+        // 箭头
+        // 箭头路径基准大小为 1024x1024，箭头应居中
+        pathOfArrow: createPathOfArrow()
+    };
+
+    /**
+     * 默认渲染器
+     */
+    class MouseGestureRenderer {
+        // Public class fields, starting with firefox 69
+        static STATUS_IDLE = 0;
+        static STATUS_ACTIVE = 1;
+
+        /// region status
+        /**
+         * 状态
+         * @type {number}
+         */
+        status = MouseGestureRenderer.STATUS_IDLE;
+
+        /**
+         * 绘制的鼠标手势中各条线的坐标
+         * @type {Path2D | null}
+         */
+        mouseMovePath = null;
+
+        /**
+         * 绘制鼠标手势的canvas的容器
+         * @type {Element | null}
+         */
+        containerElement = null;
+        /**
+         * 绘制鼠标手势的canvas的 CanvasRenderingContext2D
+         * @type {CanvasRenderingContext2D | null}
+         */
+        renderingContext = null;
+        /**
+         * 当前鼠标手势编码
+         * @type {string}
+         */
+        directionChain = '';
+        /**
+         * 当前鼠标手势名称
+         * @type {string | void}
+         */
+        gestureName = '';
+
+        /**
+         * 一个 long 整数，请求 ID ，是回调列表中唯一的标识。
+         * 是个非零值，没别的意义。你可以传这个值给 window.cancelAnimationFrame() 以取消回调函数。
+         * @type {number}
+         */
+        animationFrameHandle = 0;
+
+        /// endregion status
+        constructor(config) {
+            config = weakAssign(config, defaultMouseGestureRendererConfig);
+            /**
+             * 鼠标手势颜色
+             * @type {string}
+             */
+            this.gestureColor = config.gestureColor;
+            /**
+             * 鼠标手势线宽
+             * @type {number}
+             */
+            this.gestureLineWidth = config.gestureLineWidth;
+            /**
+             * 鼠标手势盒子颜色
+             * @type {string}
+             */
+            this.gestureBoxColor = config.gestureBoxColor;
+            /**
+             * 鼠标手势文本颜色
+             * @type {string}
+             */
+            this.gestureTextColor = config.gestureTextColor;
+            /**
+             * 箭头
+             * @type {Path2D}
+             */
+            this.pathOfArrow = config.pathOfArrow;
+
+            this.animationFrameCallback = () => {
+                try {
+                    this.internalRenderGesture();
+                } catch (e) {
+                    log('animationFrameCallback', e);
+                } finally {
+                    // reset animationFrameHandle since it is called
+                    this.animationFrameHandle = 0;
+                }
+            };
         }
-        let boxW = width >> 3,
-                boxH = Math.max(48, height >> 3),
-                midW = (width >> 1),
-                boxX = midW - (boxW >> 1),
-                boxY = (height >> 1) - (boxH >> 1),
-                textH = boxH >> 2,
-                lineH = textH + (textH >> 1),
-                textY = boxY;
-        let text = [
-            // directionChain,
-            name || ('未知手势: ' + directionChain)
-        ];
-        ctx.font = textH + 'px sans-serif';
-        let textWidthArray = [];
-        for (let i = 0, l = text.length, t, w; i < l; i++) {
-            t = text[i];
-            w = ctx.measureText(t);
-            if (w.width > boxW) {
-                boxW = (w.width | 0) + 8;
+
+        /// region active
+
+        /**
+         * Create css text for {@link containerElement}
+         * @param {number} clientHeight
+         * @return {string} css text
+         */
+        containerElementCssText(clientHeight) {
+            return `
+-moz-user-focus: none !important;
+-moz-user-select: none !important;
+display: -moz-box !important;
+box-sizing: border-box !important;
+pointer-events: none !important;
+margin: 0 !important;
+padding: 0 !important;
+width: 100% !important;
+height: ${clientHeight}px !important;
+border: none !important;
+box-shadow: none !important;
+overflow: hidden !important;
+background: none !important;
+position: fixed !important;
+z-index: 2147483647 !important;`.trim();
+        }
+
+        createCanvas() {
+            this.containerElement = document.createXULElement('hbox');
+            const canvas = document.createElementNS(
+                    'http://www.w3.org/1999/xhtml', 'canvas');
+            let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
+            // high dpi scale support
+            let devicePixelRatio = window.devicePixelRatio || 1;
+            if (devicePixelRatio !== 1) {
+                canvas.width = clientWidth * devicePixelRatio;
+                canvas.height = clientHeight * devicePixelRatio;
+                // transform displays better on firefox
+                canvas.style.transform = 'scale(' + (1 / devicePixelRatio) + ')';
+                canvas.style.transformOrigin = '0 0';
+            } else {
+                canvas.width = clientWidth;
+                canvas.height = clientHeight;
+            }
+            this.renderingContext = canvas.getContext('2d');
+            this.containerElement.style.cssText =
+                    this.containerElementCssText(clientHeight);
+            this.containerElement.appendChild(canvas);
+            gBrowser.selectedBrowser.parentNode.insertBefore(
+                    this.containerElement, gBrowser.selectedBrowser.nextSibling);
+
+        }
+
+        /**
+         * @param {number?} x initial x
+         * @param {number?} y initial y
+         */
+        createPath2D(x, y) {
+            this.mouseMovePath = new Path2D();
+            if (x && y) {
+                // high dpi scale support
+                let devicePixelRatio = window.devicePixelRatio || 1;
+                this.mouseMovePath.moveTo(
+                        // make it faster by discarding non-integer part
+                        (x * devicePixelRatio) | 0,
+                        (y * devicePixelRatio) | 0
+                );
+            }
+        }
+
+        /**
+         * Setup dom or xul elements for rendering
+         * @param {number?} x initial x
+         * @param {number?} y initial y
+         */
+        active(x, y) {
+            if (this.isActive()) {
+                this.dispose();
+            }
+            this.status = MouseGestureRenderer.STATUS_ACTIVE;
+            this.createCanvas();
+            this.createPath2D(x, y);
+        }
+
+        /**
+         * True if this is active
+         * @return {boolean}
+         */
+        isActive() {
+            return this.status === MouseGestureRenderer.STATUS_ACTIVE;
+        }
+
+        /// endregion active
+
+        /// region render
+        renderGesturePath() {
+            const ctx = this.renderingContext;
+            const path = this.mouseMovePath;
+            ctx.strokeStyle = this.gestureColor;
+            ctx.lineJoin = 'bevel';
+            ctx.lineCap = 'butt';
+            ctx.lineWidth = this.gestureLineWidth;
+            if (path instanceof Path2D) {
+                ctx.stroke(path);
+            } else if (Array.isArray(path)) {
+                // should never enter this branch
+                // kept for historical reason
+                ctx.beginPath();
+                ctx.moveTo(path[0], path[1]);
+                for (let i = 2, l = path.length; i < l;) {
+                    ctx.lineTo(path[i++], path[i++]);
+                }
+                // ctx.closePath();
+                ctx.stroke();
+            }
+        }
+
+        internalRenderGesture() {
+            /**
+             * @type CanvasRenderingContext2D
+             */
+            let ctx;
+            if (!(ctx = this.renderingContext)) {
+                return;
+            }
+            let {mouseMovePath} = this;
+            if (!mouseMovePath) {
+                return;
+            }
+            const {width, height} = ctx.canvas;
+            ctx.clearRect(0, 0, width, height);
+            this.renderGesturePath();
+            const {directionChain, gestureName: name} = this;
+            // 如果没有手势（一般是鼠标首次移动），不渲染盒子
+            if (!directionChain) {
+                return;
+            }
+
+            let boxW = width >> 3,
+                    boxH = Math.max(48, height >> 3),
+                    midW = (width >> 1),
+                    boxX = midW - (boxW >> 1),
+                    boxY = (height >> 1) - (boxH >> 1),
+                    textH = boxH >> 2,
+                    lineH = textH + (textH >> 1),
+                    textY = boxY;
+            let text = [
+                // directionChain,
+                name || ('未知手势: ' + directionChain)
+            ];
+            ctx.font = textH + 'px sans-serif';
+            let textWidthArray = [];
+            for (let i = 0, l = text.length, t, w; i < l; i++) {
+                t = text[i];
+                w = ctx.measureText(t);
+                if (w.width > boxW) {
+                    boxW = (w.width | 0) + 8;
+                    boxX = midW - (boxW >> 1);
+                }
+                textWidthArray[i] = midW - (w.width >> 1);
+            }
+            let arrowH = textH + (textH >> 1), arrowW = arrowH * directionChain.length;
+            if (arrowW > boxW) {
+                boxW = (arrowW | 0) + 8;
                 boxX = midW - (boxW >> 1);
             }
-            textWidthArray[i] = midW - (w.width >> 1);
-        }
-        let arrowH = textH + (textH >> 1), arrowW = arrowH * directionChain.length;
-        if (arrowW > boxW) {
-            boxW = (arrowW | 0) + 8;
-            boxX = midW - (boxW >> 1);
-        }
-        ctx.fillStyle = GESTURE_BOX_COLOR;
-        ctx.fillRect(Math.max(boxX, 0), boxY, Math.min(boxW, width), boxH);
-        ctx.fillStyle = GESTURE_TEXT_COLOR;
-        textY += (textH >> 1);
-        ctx.strokeStyle = GESTURE_TEXT_COLOR;
-        const arrowPathCache = {};
-        for (let i = 0, l = directionChain.length, x = midW - (arrowW >> 1), d; i < l; i++) {
-            // only draw visible arrows
-            if (x + arrowH >= 0 && x <= width) {
-                d = directionChain[i];
-                if (!arrowPathCache[d]) {
-                    arrowPathCache[d] = transformPathOfArrow(PATH_OF_ARROW, arrowH, d);
+            ctx.fillStyle = this.gestureBoxColor;
+            ctx.fillRect(Math.max(boxX, 0), boxY, Math.min(boxW, width), boxH);
+            ctx.fillStyle = this.gestureTextColor;
+            textY += (textH >> 1);
+            const arrowPathCache = {};
+            for (let i = 0, l = directionChain.length,
+                         x = midW - (arrowW >> 1), d; i < l; i++) {
+                // only draw visible arrows
+                if (x + arrowH >= 0 && x <= width) {
+                    d = directionChain[i];
+                    if (!arrowPathCache[d]) {
+                        arrowPathCache[d] = transformPathOfArrow(this.pathOfArrow, arrowH, d);
+                    }
+                    ctx.translate(x, textY);
+                    ctx.fill(arrowPathCache[d]);
+                    // reset current transformation matrix to the identity matrix
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
                 }
-                ctx.translate(x, textY);
-                ctx.fill(arrowPathCache[d]);
-                // reset current transformation matrix to the identity matrix
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                x += arrowH;
             }
-            x += arrowH;
+            textY += (textH << 1) + (textH >> 1) + (textH >> 2);
+            for (let i = 0, l = text.length, t, w; i < l; i++) {
+                t = text[i];
+                w = textWidthArray[i];
+                ctx.fillText(t, w, textY);
+                textY += lineH;
+            }
+
         }
-        textY += (textH << 1) + (textH >> 1) + (textH >> 2);
-        for (let i = 0, l = text.length, t, w; i < l; i++) {
-            t = text[i];
-            w = textWidthArray[i];
-            ctx.fillText(t, w, textY);
-            textY += lineH;
+
+        /**
+         * @param {number} x
+         * @param {number} y
+         * @param {string} directionChain
+         * @param {string?} gestureName
+         */
+        render(x, y, directionChain, gestureName) {
+            if (!this.isActive()) {
+                this.active(x, y);
+            }
+            // high dpi scale support
+            let devicePixelRatio = window.devicePixelRatio || 1;
+            // maybe we can optimize the line by reducing points
+            this.mouseMovePath.lineTo(
+                    // make it faster by discarding non-integer part
+                    (x * devicePixelRatio) | 0,
+                    (y * devicePixelRatio) | 0
+            );
+            this.directionChain = directionChain;
+            this.gestureName = gestureName;
+            // requestAnimationFrame only if last AnimationFrame finished
+            if (!this.animationFrameHandle) {
+                // arrow func, no bind needed
+                this.animationFrameHandle =
+                        requestAnimationFrame(this.animationFrameCallback);
+            }
+        }
+
+        /// endregion render
+
+        dispose() {
+            this.status = MouseGestureRenderer.STATUS_IDLE;
+            if (this.containerElement) {
+                this.containerElement.parentNode.removeChild(this.containerElement);
+                this.containerElement = null;
+            }
+            this.renderingContext = null;
+            this.mouseMovePath = null;
         }
     }
 
-    function log(...args) {
-        if (typeof console !== "undefined" && console.log) {
-            console.log(...args);
+    /// endregion renderer
+
+    /// region direction handler
+    const defaultMouseGestureHandlerConfig = {
+        /**
+         * 鼠标移动阈值
+         * @type {number}
+         */
+        mouseMoveThreshold: 9,
+        /**
+         * 阈值计算方式
+         * hypot: 平方和的平方根 Math.hypot(dx, dy) > {@link mouseMoveThreshold}
+         * linear: dx > {@link mouseMoveThreshold} && dy > {@link mouseMoveThreshold}
+         * @type {string}
+         */
+        thresholdMethod: 'hypot',
+        /**
+         * 是否要求鼠标手势必须有两个连续的动作
+         * https://github.com/marklieberman/foxygestures/blob/
+         * 844d6a581068d09004eb12f10156c3865908eb33/src/common/GestureDetector.js#L32
+         * @type {boolean}
+         */
+        twoConsecutiveMoves: true
+    };
+
+    /**
+     * 处理鼠标手势方向
+     */
+    class MouseGestureDirectionHandler {
+        constructor(config) {
+            config = weakAssign(config, defaultMouseGestureHandlerConfig);
+            /**
+             * 鼠标移动阈值
+             * @type {number}
+             */
+            this.mouseMoveThreshold = config.mouseMoveThreshold;
+            /**
+             * 阈值计算方式
+             * @type {string}
+             */
+            this.thresholdMethod = config.thresholdMethod;
+            /**
+             * 是否要求鼠标手势必须有两个连续的动作
+             * @type {boolean}
+             */
+            this.twoConsecutiveMoves = config.twoConsecutiveMoves;
+            /**
+             * 上次实际的鼠标手势方向
+             * @see twoConsecutiveMoves
+             * @type {string}
+             */
+            this.lastDirection = '';
+            /**
+             * 上次返回的鼠标手势方向
+             * @type {string}
+             */
+            this.lastValidDirection = '';
+        }
+
+        /**
+         * 检测鼠标手势方向
+         * @param {number} dx x方向移动距离
+         * @param {number} dy y方向移动距离
+         * @return {string} 方向
+         */
+        detectDirection(dx, dy) {
+            let move;
+            if (dx > 0) {
+                if (dy > 0) {
+                    move = (dy > dx) ? 'D' : 'R';
+                } else {
+                    move = (-dy > dx) ? 'U' : 'R';
+                }
+            } else {
+                if (dy > 0) {
+                    move = (dy > -dx) ? 'D' : 'L';
+                } else {
+                    move = (-dy > -dx) ? 'U' : 'L';
+                }
+            }
+
+            return move;
+        }
+
+        /**
+         * 检测阈值要求
+         * @param {number} dx x方向移动距离
+         * @param {number} dy y方向移动距离
+         * @return {boolean}
+         */
+        checkThreshold(dx, dy) {
+            let {mouseMoveThreshold} = this;
+            let devicePixelRatio = window.devicePixelRatio || 1;
+            if (devicePixelRatio !== 1) {
+                mouseMoveThreshold /= devicePixelRatio;
+            }
+            if (this.thresholdMethod === 'hypot') {
+                return Math.hypot(dx, dy) > mouseMoveThreshold;
+            }
+            return dx > mouseMoveThreshold && dy > mouseMoveThreshold;
+        }
+
+        /**
+         * 处理鼠标手势方向
+         * @param {number} dx x方向移动距离
+         * @param {number} dy y方向移动距离
+         * @return {string|boolean} 鼠标手势方向, false 为不满足阈值要求
+         */
+        handleMove(dx, dy) {
+            if (!this.checkThreshold(dx, dy)) {
+                return false;
+            }
+            let direction = this.detectDirection(dx, dy);
+            if (direction === this.lastValidDirection) {
+                return '';
+            }
+            if (this.twoConsecutiveMoves) {
+                let isTwoConsecutiveMoves = direction !== this.lastDirection;
+                this.lastDirection = direction;
+                if (isTwoConsecutiveMoves) {
+                    return '';
+                }
+            }
+            this.lastValidDirection = direction;
+            return direction;
+        }
+
+        /**
+         * 处理鼠标滚轮手势方向
+         * @see WheelEvent
+         * @param {number} deltaX 横向滚动量
+         * @param {number} deltaY 纵向滚动量
+         * @param {number} deltaZ z轴方向上的滚动量
+         * @return {string | void} 鼠标手势方向
+         */
+        handleWheel(deltaX, deltaY, deltaZ) {
+            let direction;
+            if (deltaY) {
+                // 纵向滚动
+                direction = (deltaY > 0 ? '+' : '-');
+            } else if (deltaX) {
+                // 横向滚动
+                direction = (deltaX > 0 ? 'R' : 'L');
+            } else if (deltaZ) {
+                // 滚轮的z轴方向上的滚动
+                direction = (deltaZ > 0 ? 'U' : 'D');
+            }
+            return direction;
+        }
+
+        /**
+         * 清理
+         */
+        clear() {
+            this.lastDirection = '';
+            this.lastValidDirection = '';
         }
     }
+    /// endregion direction handler
 
     class MouseGestureCommand {
         // 后退
@@ -251,7 +676,8 @@
             MouseGestureCommand.__scrollTabPos -= 1;
             setTimeout(() => {
                 if (!MouseGestureCommand.__scrollTabPos) return;
-                gBrowser.tabContainer.advanceSelectedTab(MouseGestureCommand.__scrollTabPos, true);
+                gBrowser.tabContainer.advanceSelectedTab(
+                        MouseGestureCommand.__scrollTabPos, true);
                 MouseGestureCommand.__scrollTabPos = 0;
             }, 5);
         }
@@ -264,7 +690,8 @@
             MouseGestureCommand.__scrollTabPos += 1;
             setTimeout(() => {
                 if (!MouseGestureCommand.__scrollTabPos) return;
-                gBrowser.tabContainer.advanceSelectedTab(MouseGestureCommand.__scrollTabPos, true);
+                gBrowser.tabContainer.advanceSelectedTab(
+                        MouseGestureCommand.__scrollTabPos, true);
                 MouseGestureCommand.__scrollTabPos = 0;
             }, 5);
         }
@@ -330,7 +757,7 @@
                     Components.utils.import("resource://gre/modules/ctypes.jsm");
                 }
                 var lib = ctypes.open("user32.dll");
-                var funcActiveWindow = 0;
+                var funcActiveWindow;
                 // noinspection UnusedCatchParameterJS
                 try {
                     // noinspection JSDeprecatedSymbols
@@ -507,38 +934,13 @@
             this.gestures = gestures;
             this.setGestures(gestures);
             /**
-             * 绘制的鼠标手势中各条线的坐标
-             * @type {Path2D | null}
+             * 鼠标手势渲染器
              */
-            this.mouseMovePath = null;
+            this.renderer = new MouseGestureRenderer();
             /**
-             * 绘制鼠标手势的canvas的容器
-             * @type {HTMLCanvasElement | null}
+             * 处理鼠标手势方向
              */
-            this.xdTrailArea = null;
-            /**
-             * 绘制鼠标手势的canvas的 CanvasRenderingContext2D
-             * @type {CanvasRenderingContext2D | null}
-             */
-            this.xdTrailAreaContext = null;
-
-            /**
-             * 一个 long 整数，请求 ID ，是回调列表中唯一的标识。
-             * 是个非零值，没别的意义。你可以传这个值给 window.cancelAnimationFrame() 以取消回调函数。
-             * @type {number}
-             */
-            this.animationFrameHandle = 0;
-
-            this.animationFrameCallback = () => {
-                try {
-                    this.draw();
-                } catch (e) {
-                    log('animationFrameCallback', e);
-                } finally {
-                    // reset animationFrameHandle since it is called
-                    this.animationFrameHandle = 0;
-                }
-            };
+            this.directionHandler = new MouseGestureDirectionHandler();
         }
 
         setGestures(gestures) {
@@ -603,23 +1005,6 @@
             window.removeEventListener('blur', this);
         }
 
-        draw() {
-            /**
-             * @type CanvasRenderingContext2D
-             */
-            let ctx;
-            if (!(ctx = this.xdTrailAreaContext)) {
-                return;
-            }
-            let {mouseMovePath} = this;
-            this.hideFireContext = true;
-            if (!mouseMovePath) {
-                return;
-            }
-            let g = this.gestures[this.directionChain];
-            drawGesture(ctx, mouseMovePath, this.directionChain, g && g.name);
-        }
-
         endGesture() {
             this.isMouseDownR = false;
             // this.shouldFireContext = false;
@@ -641,56 +1026,15 @@
                     Reflect.set(gBrowser, '__mozIsInGesture', 0);
                 }
             }
-            if (this.xdTrailArea) {
-                this.xdTrailArea.parentNode.removeChild(this.xdTrailArea);
-                this.xdTrailArea = null;
-                this.xdTrailAreaContext = null;
-                this.mouseMovePath = null;
-            }
+            this.renderer.dispose();
+            this.directionHandler.clear();
             this.directionChain = '';
+            this.lastX = 0;
+            this.lastY = 0;
             setTimeout(() => StatusPanel._label = '', 2000);
             this.hideFireContext = true;
         }
 
-        createCanvas() {
-            this.xdTrailArea = document.createXULElement('hbox');
-            let canvas = document.createElementNS(
-                    'http://www.w3.org/1999/xhtml', 'canvas');
-            let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
-            let devicePixelRatio = window.devicePixelRatio || 1;
-            if (devicePixelRatio !== 1) {
-                canvas.width = clientWidth * devicePixelRatio;
-                canvas.height = clientHeight * devicePixelRatio;
-                canvas.style.transform = 'scale(' + (1 / devicePixelRatio) + ')';
-                canvas.style.transformOrigin = '0 0';
-            } else {
-                canvas.width = clientWidth;
-                canvas.height = clientHeight;
-            }
-            // canvas.style.width = clientWidth + 'px';
-            // canvas.style.height = clientHeight + 'px';
-            this.xdTrailAreaContext = canvas.getContext('2d');
-            this.xdTrailArea.style.cssText = `
--moz-user-focus: none !important;
--moz-user-select: none !important;
-display: -moz-box !important;
-box-sizing: border-box !important;
-pointer-events: none !important;
-margin: 0 !important;
-padding: 0 !important;
-width: 100% !important;
-height: ${clientHeight}px !important;
-border: none !important;
-box-shadow: none !important;
-overflow: hidden !important;
-background: none !important;
-position: fixed !important;
-z-index: 2147483647 !important;`;
-            this.xdTrailArea.appendChild(canvas);
-            gBrowser.selectedBrowser.parentNode.insertBefore(
-                    this.xdTrailArea, gBrowser.selectedBrowser.nextSibling);
-
-        }
 
         /// region event handlers
 
@@ -698,7 +1042,11 @@ z-index: 2147483647 !important;`;
             if (event.button === 2) {
                 this.isMouseDownR = true;
                 this.hideFireContext = false;
-                [this.lastX, this.lastY, this.directionChain] = [event.screenX, event.screenY, ''];
+                let {screenX: x, screenY: y} = event;
+                const {screenX, screenY} = gBrowser.selectedBrowser;
+                x -= screenX;
+                y -= screenY;
+                [this.lastX, this.lastY, this.directionChain] = [x, y, ''];
             }
             if (event.button === 0) {
                 this.endGesture();
@@ -709,47 +1057,29 @@ z-index: 2147483647 !important;`;
             if (!this.isMouseDownR) {
                 return;
             }
-            let [subX, subY] = [event.screenX - this.lastX, event.screenY - this.lastY];
-            let [distX, distY] = [(subX > 0 ? subX : (-subX)), (subY > 0 ? subY : (-subY))];
+            let {screenX: x, screenY: y} = event;
             const {screenX, screenY} = gBrowser.selectedBrowser;
-            let devicePixelRatio = window.devicePixelRatio || 1;
-            let threshold = MOUSE_MOVE_THRESHOLD / devicePixelRatio;
-            let direction;
-            if (distX < threshold && distY < threshold) return;
-            if (distX > distY) direction = subX < 0 ? 'L' : 'R';
-            else direction = subY < 0 ? 'U' : 'D';
-
-            if (!this.xdTrailArea) {
-                this.createCanvas();
-                this.mouseMovePath = new Path2D();
-                this.mouseMovePath.moveTo(
-                        // make it faster by discarding non-integer part
-                        ((this.lastX - screenX) * devicePixelRatio) | 0,
-                        ((this.lastY - screenY) * devicePixelRatio) | 0
-                );
+            x -= screenX;
+            y -= screenY;
+            let [dx, dy] = [x - this.lastX, y - this.lastY];
+            let direction = this.directionHandler.handleMove(dx, dy);
+            if (direction === false) return;
+            if (!this.renderer.isActive()) {
+                this.renderer.active(this.lastX, this.lastY);
             }
-            if (this.xdTrailAreaContext) {
-                this.mouseMovePath.lineTo(
-                        // make it faster by discarding non-integer part
-                        ((event.screenX - screenX) * devicePixelRatio) | 0,
-                        ((event.screenY - screenY) * devicePixelRatio) | 0
-                );
-                // requestAnimationFrame only if last AnimationFrame finished
-                if (!this.animationFrameHandle) {
-                    // arrow func, no bind needed
-                    this.animationFrameHandle =
-                            requestAnimationFrame(this.animationFrameCallback);
-                }
-                this.lastX = event.screenX;
-                this.lastY = event.screenY;
-            }
-            if (direction !== this.directionChain.charAt(this.directionChain.length - 1)) {
+            this.lastX = x;
+            this.lastY = y;
+            let g;
+            if (direction) {
                 this.directionChain += direction;
-                let g = this.gestures[this.directionChain];
+                g = this.gestures[this.directionChain];
                 StatusPanel._label = g ?
                         '手势: ' + this.directionChain + ' ' + g.name :
                         '未知手势: ' + this.directionChain;
+            } else {
+                g = this.gestures[this.directionChain];
             }
+            this.renderer.render(x, y, this.directionChain, g && g.name);
         }
 
         mouseup(event) {
@@ -776,17 +1106,9 @@ z-index: 2147483647 !important;`;
             }
             // this.shouldFireContext = false;
             this.hideFireContext = true;
-            let direction;
-            if (event.deltaY) {
-                // 纵向滚动
-                direction = (event.deltaY > 0 ? '+' : '-');
-            } else if (event.deltaX) {
-                // 横向滚动
-                direction = (event.deltaX > 0 ? 'R' : 'L');
-            } else if (event.deltaZ) {
-                // 滚轮的z轴方向上的滚动
-                direction = (event.deltaZ > 0 ? 'U' : 'D');
-            } else {
+            let direction = this.directionHandler.handleWheel(
+                    event.deltaX, event.deltaY, event.deltaZ);
+            if (!direction) {
                 this.endGesture();
                 return;
             }
@@ -817,6 +1139,6 @@ z-index: 2147483647 !important;`;
         }
     }
 
-    let ucjsMouseGestures = new UcMouseGesture();
-    ucjsMouseGestures.bindEvent();
+    let ucMouseGestures = new UcMouseGesture();
+    ucMouseGestures.bindEvent();
 })();
