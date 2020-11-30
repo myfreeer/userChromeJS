@@ -6,11 +6,12 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-11-27
+// @version              2020-11-30 multiple direction gestures
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
     'use strict';
+
     /// region utils
     function weakAssign(target, source) {
         if (!source) return target;
@@ -27,6 +28,7 @@
             console.log(...args);
         }
     }
+
     /// endregion utils
 
     /// region renderer
@@ -79,6 +81,28 @@
                 domMatrix.translateSelf(0, size);
                 domMatrix.rotateSelf(-90);
                 break;
+            case 'Lu':
+                domMatrix.translateSelf(-(size >> 3) - (size >> 5), size >> 1);
+                domMatrix.rotateSelf(-45);
+                break;
+            case 'Ld':
+                domMatrix.translateSelf(
+                        (size >> 1) + (size >> 5),
+                        size + (size >> 2)
+                );
+                domMatrix.rotateSelf(-135);
+                break;
+            case 'Ru':
+                domMatrix.translateSelf(size >> 1, -(size >> 3) - (size >> 5));
+                domMatrix.rotateSelf(45);
+                break;
+            case 'Rd':
+                domMatrix.translateSelf(
+                        size + (size >> 3) + (size >> 4),
+                        (size >> 1) + (size >> 5)
+                );
+                domMatrix.rotateSelf(135);
+                break;
             case 'U':
             default:
                 break;
@@ -99,6 +123,8 @@
         gestureLineWidth: 4,
         // 鼠标手势盒子颜色
         gestureBoxColor: 'rgba(0, 0, 0, 0.8)',
+        // 鼠标手势盒子横向边距
+        gestureBoxPaddingX: 8,
         // 鼠标手势文本颜色
         gestureTextColor: '#ffffff',
         // 箭头
@@ -129,7 +155,7 @@
 
         /**
          * 绘制鼠标手势的canvas的容器
-         * @type {Element | null}
+         * @type {HTMLElement | Element | null}
          */
         containerElement = null;
         /**
@@ -157,6 +183,7 @@
 
         /// endregion status
         constructor(config) {
+            /// region config
             config = weakAssign(config, defaultMouseGestureRendererConfig);
             /**
              * 鼠标手势颜色
@@ -174,6 +201,11 @@
              */
             this.gestureBoxColor = config.gestureBoxColor;
             /**
+             * 鼠标手势盒子横向边距
+             * @type {number}
+             */
+            this.gestureBoxPaddingX = config.gestureBoxPaddingX;
+            /**
              * 鼠标手势文本颜色
              * @type {string}
              */
@@ -183,6 +215,7 @@
              * @type {Path2D}
              */
             this.pathOfArrow = config.pathOfArrow;
+            /// endregion config
 
             this.animationFrameCallback = () => {
                 try {
@@ -224,9 +257,11 @@ z-index: 2147483647 !important;`.trim();
 
         createCanvas() {
             this.containerElement = document.createXULElement('hbox');
+            const {selectedBrowser} = gBrowser;
+            const canvasContainer = selectedBrowser.parentNode;
             const canvas = document.createElementNS(
                     'http://www.w3.org/1999/xhtml', 'canvas');
-            let {clientHeight, clientWidth} = gBrowser.selectedBrowser;
+            let {clientHeight, clientWidth} = selectedBrowser;
             // high dpi scale support
             let devicePixelRatio = window.devicePixelRatio || 1;
             if (devicePixelRatio !== 1) {
@@ -243,8 +278,8 @@ z-index: 2147483647 !important;`.trim();
             this.containerElement.style.cssText =
                     this.containerElementCssText(clientHeight);
             this.containerElement.appendChild(canvas);
-            gBrowser.selectedBrowser.parentNode.insertBefore(
-                    this.containerElement, gBrowser.selectedBrowser.nextSibling);
+            canvasContainer.insertBefore(
+                    this.containerElement, selectedBrowser.nextSibling);
 
         }
 
@@ -345,34 +380,57 @@ z-index: 2147483647 !important;`.trim();
                 // directionChain,
                 name || ('未知手势: ' + directionChain)
             ];
+
+            // calculate text width
             ctx.font = textH + 'px sans-serif';
             let textWidthArray = [];
             for (let i = 0, l = text.length, t, w; i < l; i++) {
                 t = text[i];
                 w = ctx.measureText(t);
-                if (w.width > boxW) {
-                    boxW = (w.width | 0) + 8;
+                // text width overflow, add some padding
+                if (w.width >= boxW) {
+                    boxW = (w.width | 0) + this.gestureBoxPaddingX;
                     boxX = midW - (boxW >> 1);
                 }
                 textWidthArray[i] = midW - (w.width >> 1);
             }
-            let arrowH = textH + (textH >> 1), arrowW = arrowH * directionChain.length;
-            if (arrowW > boxW) {
-                boxW = (arrowW | 0) + 8;
+
+            // calculate arrow width
+            let arrowH = textH + (textH >> 1),
+                    arrowW = arrowH * this.directionChainLength(directionChain);
+            // arrow width overflow, add some padding
+            if (arrowW >= boxW) {
+                boxW = (arrowW | 0) + this.gestureBoxPaddingX;
                 boxX = midW - (boxW >> 1);
             }
+
+            // render the box
             ctx.fillStyle = this.gestureBoxColor;
             ctx.fillRect(Math.max(boxX, 0), boxY, Math.min(boxW, width), boxH);
+
+            /// region render the arrows
             ctx.fillStyle = this.gestureTextColor;
             textY += (textH >> 1);
             const arrowPathCache = {};
             for (let i = 0, l = directionChain.length,
-                         x = midW - (arrowW >> 1), d; i < l; i++) {
+                         x = midW - (arrowW >> 1), d, n, c; i < l; i++) {
+                d = directionChain[i];
+                // 检测斜向手势
+                n = i + 1;
+                if (n < l) {
+                    // 单个手势编码最多包含2个字符
+                    c = directionChain.charCodeAt(i + 1);
+                    // 97:  'a'.charCodeAt(0)
+                    // 122: 'z'.charCodeAt(0)
+                    if (c >= 97 && c <= 122) {
+                        d += directionChain[++i];
+                    }
+                }
                 // only draw visible arrows
                 if (x + arrowH >= 0 && x <= width) {
-                    d = directionChain[i];
                     if (!arrowPathCache[d]) {
-                        arrowPathCache[d] = transformPathOfArrow(this.pathOfArrow, arrowH, d);
+                        arrowPathCache[d] =
+                                transformPathOfArrow(this.pathOfArrow, arrowH, d);
                     }
                     ctx.translate(x, textY);
                     ctx.fill(arrowPathCache[d]);
@@ -381,6 +439,9 @@ z-index: 2147483647 !important;`.trim();
                 }
                 x += arrowH;
             }
+            /// endregion render the arrows
+
+            // render text
             textY += (textH << 1) + (textH >> 1) + (textH >> 2);
             for (let i = 0, l = text.length, t, w; i < l; i++) {
                 t = text[i];
@@ -429,6 +490,27 @@ z-index: 2147483647 !important;`.trim();
             }
             this.renderingContext = null;
             this.mouseMovePath = null;
+            this.directionChain = '';
+            this.gestureName = '';
+        }
+
+        /**
+         * 计算鼠标手势编码长度
+         * 每个大写字母代表一个手势
+         * @param directionChain 鼠标手势编码
+         * @return {number} 长度
+         */
+        directionChainLength(directionChain) {
+            let len = 0;
+            for (let i = 0, l = directionChain.length, c; i < l; i++) {
+                c = directionChain.charCodeAt(i);
+                // 65: 'A'.charCodeAt(0)
+                // 90: 'Z'.charCodeAt(0)
+                if (c >= 65 && c <= 90) {
+                    len++;
+                }
+            }
+            return len;
         }
     }
 
@@ -454,7 +536,16 @@ z-index: 2147483647 !important;`.trim();
          * 844d6a581068d09004eb12f10156c3865908eb33/src/common/GestureDetector.js#L32
          * @type {boolean}
          */
-        twoConsecutiveMoves: true
+        twoConsecutiveMoves: true,
+        /**
+         * 鼠标手势方向
+         * default: 4个方向，按90度划分 U, D, L, R
+         * 45deg:   8个方向，按45度划分 U, D, L, R, Lu, Ld, Ru, Rd
+         * 60deg:   8个方向，按30度划分 U, D, L, R ; 按60度划分 Lu, Ld, Ru, Rd
+         * https://github.com/marklieberman/foxygestures/blob/master/extra/gesture-types.html
+         * @type {string}
+         */
+        detectMethod: 'default'
     };
 
     /**
@@ -489,6 +580,12 @@ z-index: 2147483647 !important;`.trim();
              * @type {string}
              */
             this.lastValidDirection = '';
+            // 支持多种鼠标手势方向实现
+            if (config.detectMethod === '45deg') {
+                this.detectDirection = this.detectDirection45deg;
+            } else if (config.detectMethod === '60deg') {
+                this.detectDirection = this.detectDirection60deg;
+            }
         }
 
         /**
@@ -513,6 +610,70 @@ z-index: 2147483647 !important;`.trim();
                 }
             }
 
+            return move;
+        }
+
+        /**
+         * 检测鼠标手势方向 (按45度划分)
+         * Gesture implementation for intercardinal directions with 45deg slices.
+         * Coordinate grid is divided into 8 slices of 45deg: U, D, L, R, Lu, Ld, Ru, Rd.
+         * @param {number} dx x方向移动距离
+         * @param {number} dy y方向移动距离
+         * @return {string} 方向
+         */
+        detectDirection45deg(dx, dy) {
+            let move = '';
+            let deg = (180 / Math.PI) * Math.atan2(dy, dx);
+            if (deg >= 22.5 && deg < 67.5) {
+                move = 'Rd';
+            } else if (deg >= 67.5 && deg < 112.5) {
+                move = 'D';
+            } else if (deg >= 112.5 && deg < 157.5) {
+                move = 'Ld';
+            } else if (deg >= -22.5 && deg < 22.5) {
+                move = 'R';
+            } else if (deg >= -67.5 && deg < -22.5) {
+                move = 'Ru';
+            } else if (deg >= -112.5 && deg < -67.5) {
+                move = 'U';
+            } else if (deg >= -157.5 && deg < -112.5) {
+                move = 'Lu';
+            } else if (deg >= 157.5 || deg < -157.5) {
+                move = 'L';
+            }
+            return move;
+        }
+
+        /**
+         * 检测鼠标手势方向 (按60度划分)
+         * Gesture implementation for intercardinal directions with 60deg slices.
+         * Coordinate grid is divided into 4 slices of 30deg for U, D, L, R
+         * and 4 slices of 60deg for Lu, Ld, Ru, Rd.
+         * This should be more forgiving when performing diagonal gestures.
+         * @param {number} dx x方向移动距离
+         * @param {number} dy y方向移动距离
+         * @return {string} 方向
+         */
+        detectDirection60deg(dx, dy) {
+            let move = '';
+            let deg = (180 / Math.PI) * Math.atan2(dy, dx);
+            if (deg >= 15 && deg < 75) {
+                move = 'Rd';
+            } else if (deg >= 75 && deg < 105) {
+                move = 'D';
+            } else if (deg >= 105 && deg < 165) {
+                move = 'Ld';
+            } else if (deg >= -15 && deg < 15) {
+                move = 'R';
+            } else if (deg >= -75 && deg < -15) {
+                move = 'Ru';
+            } else if (deg >= -105 && deg < -75) {
+                move = 'U';
+            } else if (deg >= -165 && deg < -105) {
+                move = 'Lu';
+            } else if (deg >= 165 || deg < -165) {
+                move = 'L';
+            }
             return move;
         }
 
@@ -545,7 +706,7 @@ z-index: 2147483647 !important;`.trim();
                 return false;
             }
             let direction = this.detectDirection(dx, dy);
-            if (direction === this.lastValidDirection) {
+            if (!direction || direction === this.lastValidDirection) {
                 return '';
             }
             if (this.twoConsecutiveMoves) {
@@ -590,6 +751,7 @@ z-index: 2147483647 !important;`.trim();
             this.lastValidDirection = '';
         }
     }
+
     /// endregion direction handler
 
     class MouseGestureCommand {
