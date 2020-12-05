@@ -1083,6 +1083,9 @@ z-index: 2147483647 !important;`.trim();
             this.directionChain = '';
             // 是否在绘制鼠标手势
             this.isMouseDownR = false;
+            // 是否在开始绘制鼠标手势
+            // 用于开启了 twoConsecutiveMoves 时首次手势没有正确的销毁
+            this.isStarting = false;
             // 是否拦截右键菜单触发
             this.hideFireContext = false;
             // 鼠标手势事件
@@ -1188,13 +1191,18 @@ z-index: 2147483647 !important;`.trim();
                     Reflect.set(gBrowser, '__mozIsInGesture', 0);
                 }
             }
+            this.clear();
+            setTimeout(() => StatusPanel._label = '', 2000);
+            this.hideFireContext = true;
+        }
+
+        clear() {
             this.renderer.dispose();
             this.directionHandler.clear();
             this.directionChain = '';
             this.lastX = 0;
             this.lastY = 0;
-            setTimeout(() => StatusPanel._label = '', 2000);
-            this.hideFireContext = true;
+            this.isStarting = false;
         }
 
 
@@ -1217,6 +1225,9 @@ z-index: 2147483647 !important;`.trim();
 
         mousemove(event) {
             if (!this.isMouseDownR) {
+                if (this.isStarting && this.renderer.isActive()) {
+                    this.clear();
+                }
                 return;
             }
             let {screenX: x, screenY: y} = event;
@@ -1241,6 +1252,7 @@ z-index: 2147483647 !important;`.trim();
             } else {
                 g = this.gestures[this.directionChain];
             }
+            this.isStarting = !direction && !this.directionChain;
             this.renderer.render(x, y, this.directionChain, g && g.name);
         }
 
