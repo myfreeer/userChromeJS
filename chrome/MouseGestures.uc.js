@@ -21,6 +21,7 @@
                 target[key] = source[key];
             }
         }
+        return target;
     }
 
     function log(...args) {
@@ -349,7 +350,7 @@ z-index: 2147483647 !important;`.trim();
 
         internalRenderGesture() {
             /**
-             * @type CanvasRenderingContext2D
+             * @type {CanvasRenderingContext2D}
              */
             let ctx;
             if (!(ctx = this.renderingContext)) {
@@ -376,6 +377,7 @@ z-index: 2147483647 !important;`.trim();
                     textH = boxH >> 2,
                     lineH = textH + (textH >> 1),
                     textY = boxY;
+
             let text = [
                 // directionChain,
                 name || ('未知手势: ' + directionChain)
@@ -419,7 +421,7 @@ z-index: 2147483647 !important;`.trim();
                 n = i + 1;
                 if (n < l) {
                     // 单个手势编码最多包含2个字符
-                    c = directionChain.charCodeAt(i + 1);
+                    c = directionChain.charCodeAt(n);
                     // 97:  'a'.charCodeAt(0)
                     // 122: 'z'.charCodeAt(0)
                     if (c >= 97 && c <= 122) {
@@ -1092,8 +1094,12 @@ z-index: 2147483647 !important;`.trim();
             this.events = [
                 'mousedown',
                 'mousemove',
-                'wheel',
                 'keydown'
+            ];
+            // 非 passive 鼠标手势事件,
+            this.noPassiveEvents = [
+                'contextmenu',
+                'wheel'
             ];
             // 鼠标手势列表
             this.gestures = gestures;
@@ -1135,7 +1141,13 @@ z-index: 2147483647 !important;`.trim();
                 });
             }
             // 需要拦截此事件，故不可为 passive
-            gBrowser.tabpanels.addEventListener('contextmenu', this, true);
+            for (let i = 0, a = this.noPassiveEvents, l = a.length, type; i < l; i++) {
+                type = a[i];
+                document.addEventListener(type, this, {
+                    capture: true,
+                    passive: false
+                });
+            }
             const {mPanelContainer} = gBrowser;
             if (mPanelContainer) {
                 mPanelContainer.addEventListener("mousemove", this, {
@@ -1157,11 +1169,15 @@ z-index: 2147483647 !important;`.trim();
         }
 
         unbindEvent() {
+            this.clear();
             for (let i = 0, a = this.events, l = a.length, type; i < l; i++) {
                 type = a[i];
                 gBrowser.tabpanels.removeEventListener(type, this, true);
             }
-            gBrowser.tabpanels.removeEventListener('contextmenu', this, true);
+            for (let i = 0, a = this.noPassiveEvents, l = a.length, type; i < l; i++) {
+                type = a[i];
+                document.removeEventListener(type, this, true);
+            }
             const {mPanelContainer} = gBrowser;
             if (mPanelContainer) {
                 mPanelContainer.removeEventListener("mousemove", this, false);
@@ -1271,6 +1287,8 @@ z-index: 2147483647 !important;`.trim();
                 this.hideFireContext = false;
                 event.preventDefault();
                 event.stopImmediatePropagation();
+            } else if (this.isStarting) {
+                this.clear();
             }
         }
 
@@ -1287,6 +1305,14 @@ z-index: 2147483647 !important;`.trim();
                 return;
             }
             this.directionChain = 'W' + direction;
+            let g = this.gestures[this.directionChain];
+            // https://developer.mozilla.org/zh-CN/docs/Web/API/Event/cancelable
+            const shouldCancelEvent = g && g.cmd &&
+                    (typeof event.cancelable !== 'boolean' || event.cancelable);
+            if (shouldCancelEvent) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
             this.stopGesture();
         }
 
