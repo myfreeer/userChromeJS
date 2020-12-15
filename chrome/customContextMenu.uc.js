@@ -187,4 +187,99 @@
     }
     // endregion 书签栏增加添加书签到此处
 
+    // region 页面右键菜单用其他搜索引擎搜索
+    if (contentAreaContextMenu) {
+        const searchWithOther = function searchWithOther(index) {
+            if (!this) return false;
+            const {engines, principal, searchTerms, usePrivate, csp} = this;
+            if (!engines || !engines[index]) return false;
+            BrowserSearch._loadSearch(
+                    searchTerms,
+                    usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)
+                            ? "window"
+                            : "tab",
+                    usePrivate,
+                    "contextmenu",
+                    Services.scriptSecurityManager.createNullPrincipal(
+                            principal.originAttributes
+                    ),
+                    csp,
+                    engines[index]
+            );
+        };
+        // not making it too long
+        // noinspection UnnecessaryLocalVariableJS
+        const initSearch = async function showAndFormatOtherSearchContextItem() {
+            let menu = document.getElementById(
+                    "context-searchselect-other-parent");
+            let popup = document.getElementById("context-searchselect-other");
+            if (!menu) {
+                menu = createXulElement("menu", {
+                    "id": "context-searchselect-other-parent",
+                    "class": "customize-context-searchselect-other",
+                    "label": '用其他搜索引擎搜索'
+                });
+                let menuItem = document.getElementById('context-searchselect');
+                if (!menuItem || !menuItem.parentElement) {
+                    return false;
+                }
+                menuItem.parentElement.insertBefore(menu, menuItem.nextElementSibling);
+                popup = createXulElement('menupopup', {
+                    'id': "context-searchselect-other"
+                });
+                menu.appendChild(popup);
+            }
+            if (!Services.search.isInitialized) {
+                menu.hidden = true;
+                return;
+            }
+            const showSearchSelect =
+                    !this.inAboutDevtoolsToolbox &&
+                    (this.isTextSelected || this.onLink) &&
+                    !this.onImage;
+            if (!showSearchSelect) {
+                menu.hidden = true;
+                return;
+            }
+            menu.hidden = false;
+            popup.searchTerms = this.isTextSelected
+                    ? this.textSelected
+                    : this.linkTextStr;
+            popup.principal = this.principal;
+            popup.engines = await Services.search.getVisibleEngines();
+            if (!popup.engines.length) {
+                menu.hidden = true;
+                return;
+            }
+            popup.usePrivate = PrivateBrowsingUtils.isBrowserPrivate(this.browser);
+            popup.csp = this.csp;
+            for (let i = 0; i < popup.engines.length; i++) {
+                let menuItem = popup.children[i];
+                if (!menuItem) {
+                    menuItem = createXulElement("menuitem", {
+                        "contexttype": "toolbaritem",
+                        "class": "customize-context-openExtensionOption",
+                        "label": popup.engines[i].name,
+                        "oncommand": 'this.parentElement._searchWithOther(' + i + ')'
+                    });
+                    popup.appendChild(menuItem);
+                } else {
+                    menuItem.label = popup.engines[i].name;
+                }
+            }
+            popup._searchWithOther = searchWithOther;
+        };
+
+        contentAreaContextMenu.addEventListener("popupshowing", function () {
+            if (window.gContextMenu) {
+                initSearch.call(gContextMenu);
+            }
+        }, {
+            passive: true,
+            capture: false
+        });
+
+    }
+    // endregion 页面右键菜单用其他搜索引擎搜索
+
 })();
