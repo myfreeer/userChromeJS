@@ -32,6 +32,19 @@
     /* endregion 禁止地址栏放大 */
 }
 
+/* region 更清晰的 canvas */
+@-moz-document url-prefix('http://'),
+url-prefix('https://'),
+url-prefix('ftp://'),
+url-prefix('file://') {
+    canvas[style] {
+        image-rendering: optimizeSpeed;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
+    }
+}
+/* endregion 更清晰的 canvas */
+
 /* region FloatingScrollbar.uc.js
 /* Note: this would break websites with modal box or other floating content on the top of scrollable content
 
