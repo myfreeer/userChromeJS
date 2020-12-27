@@ -1036,6 +1036,14 @@ z-index: 2147483647 !important;`.trim();
             gBrowser.removeAllTabsBut(gBrowser.selectedTab);
         }
 
+        // 最小化内存使用
+        static minimizeMemoryUsage() {
+            Cc["@mozilla.org/memory-reporter-manager;1"].getService(
+                    Ci.nsIMemoryReporterManager
+            ).minimizeMemoryUsage(() => {
+                StatusPanel._label = '最小化内存使用完成';
+            });
+        }
     }
 
     const defaultGestures = {
@@ -1054,6 +1062,8 @@ z-index: 2147483647 !important;`.trim();
 
         'RU': {name: '打开新标签', cmd: MouseGestureCommand.openNewTab},
         'RL': {name: '恢复关闭的标签', cmd: MouseGestureCommand.restoreClosedTab},
+        'RLR': {name: '最小化内存使用', cmd: MouseGestureCommand.minimizeMemoryUsage},
+
 
         'UL': {name: '激活左边的标签页', cmd: MouseGestureCommand.advanceLeftTab},
         'UR': {name: '激活右边的标签页', cmd: MouseGestureCommand.advanceRightTab},
