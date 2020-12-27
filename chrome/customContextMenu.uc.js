@@ -40,7 +40,8 @@
         'context-sendaudio',
     ];
     const contentAreaContextMenu = document.getElementById("contentAreaContextMenu");
-    if (contentAreaContextMenu && blockContextMenu.length) {
+    if (contentAreaContextMenu && blockContextMenu.length &&
+            !contentAreaContextMenu.___blockContextMenu) {
         contentAreaContextMenu.addEventListener("popupshowing", function () {
             if (window.gContextMenu) {
                 blockContextMenu.forEach(id => gContextMenu.showItem(id, false));
@@ -49,6 +50,7 @@
             passive: true,
             capture: false
         });
+        contentAreaContextMenu.___blockContextMenu = true;
     }
     // endregion 禁用的页面右键菜单条目
 
@@ -188,7 +190,7 @@
     // endregion 书签栏增加添加书签到此处
 
     // region 页面右键菜单用其他搜索引擎搜索
-    if (contentAreaContextMenu) {
+    if (contentAreaContextMenu && !contentAreaContextMenu.___searchWithOtherSearchEngines) {
         const searchWithOther = function searchWithOther(index) {
             if (!this) return false;
             const {engines, principal, searchTerms, usePrivate, csp} = this;
@@ -279,6 +281,7 @@
             capture: false
         });
 
+        contentAreaContextMenu.___searchWithOtherSearchEngines = true;
     }
     // endregion 页面右键菜单用其他搜索引擎搜索
 
