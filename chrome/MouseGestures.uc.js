@@ -6,7 +6,7 @@
 // @homepageURL          http://www.cnblogs.com/ziyunfei/archive/2011/12/15/2289504.html
 // @include              chrome://browser/content/browser.xhtml
 // @include              chrome://browser/content/browser.xul
-// @version              2020-11-30 multiple direction gestures
+// @version              2021-01-27 workaround for firefox 85
 // @charset              UTF-8
 // ==/UserScript==
 (() => {
@@ -1333,6 +1333,20 @@ z-index: 2147483647 !important;`.trim();
         }
 
         blur() {
+            // delay it
+            setTimeout(() => this.realBlur(), 5);
+        }
+
+        /**
+         * This is a dirty workaround for firefox 85,
+         * which dispatches blur event on tab switch
+         */
+        realBlur() {
+            if (document.hasFocus()) {
+                // tab switched
+                this.clear();
+                return;
+            }
             if (this.isMouseDownR) {
                 this.endGesture();
             }
