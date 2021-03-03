@@ -88,7 +88,7 @@
             }
             return returnValue;
         };
-
+        ToolbarContextMenu.updateExtension._superFunction = updateExtension;
         ToolbarContextMenu.openExtensionOption = async function openExtensionOption(popup) {
             const id = this._getExtensionId(popup);
             const addon = id && (await AddonManager.getAddonByID(id));
@@ -146,6 +146,7 @@
             }
             return ret;
         };
+        PlacesUIUtils.placesContextShowing._superFunction = placesContextShowing;
         PlacesUIUtils.addBookmarkToHere = async function addBookmarkToHere(popupNode) {
             if (!popupNode ||
                     !popupNode._placesNode ||
@@ -285,4 +286,36 @@
     }
     // endregion 页面右键菜单用其他搜索引擎搜索
 
+    /// region 标签栏右键关闭左侧标签页
+    const closeTabOptions = document.getElementById('closeTabOptions');
+    if (closeTabOptions && window.TabContextMenu && TabContextMenu.updateContextMenu &&
+            !TabContextMenu.__closeLeftTabs) {
+        const superUpdateContextMenu = TabContextMenu.updateContextMenu;
+        function overrideUpdateContextMenuAddCloseTabsFromLeft(aPopupMenu) {
+            superUpdateContextMenu.call(this, aPopupMenu);
+            let menuItem = document.getElementById('context_closeTabsFromLeft');
+            if (!menuItem) {
+                menuItem = createXulElement("menuitem", {
+                    "contexttype": "toolbaritem",
+                    "class": "customize-context-closeTabsFromLeft",
+                    // "accesskey": "l",
+                    "label": '关闭左侧标签页',
+                    "oncommand": 'TabContextMenu.__closeTabsFromLeft(' +
+                            'TabContextMenu.contextTab, {animate: true});'
+                });
+                closeTabOptions.prepend(menuItem);
+            }
+            menuItem.disabled = this.contextTab._tPos === 0;
+        }
+        TabContextMenu.updateContextMenu = overrideUpdateContextMenuAddCloseTabsFromLeft;
+        TabContextMenu.updateContextMenu._superFunction = superUpdateContextMenu;
+        TabContextMenu.__closeTabsFromLeft = function closeTabsFromLeft(aTab, opt) {
+            for (let i = aTab._tPos - 1; i >= 0; i--) {
+                if (!gBrowser.tabs[i].pinned) {
+                    gBrowser.removeTab(gBrowser.tabs[i], opt);
+                }
+            }
+        };
+    }
+    /// endregion 标签栏右键关闭左侧标签页
 })();
