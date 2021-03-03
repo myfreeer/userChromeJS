@@ -33,11 +33,12 @@
 }
 
 /* region 更清晰的 canvas */
-@-moz-document url-prefix('http://'),
+@-moz-document
+url-prefix('http://'),
 url-prefix('https://'),
 url-prefix('ftp://'),
 url-prefix('file://') {
-    canvas[style] {
+    canvas[style*="width"] {
         image-rendering: optimizeSpeed;
         image-rendering: -moz-crisp-edges;
         image-rendering: crisp-edges;

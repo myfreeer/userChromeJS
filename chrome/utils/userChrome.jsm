@@ -34,6 +34,9 @@ let _uc = {
       } else if ('userchrome.css' === file.leafName.toLowerCase()) {
         // console.log(file.leafName);
         _uc.loadUserChromeCss(file);
+      } else if ('usercontent.css' === file.leafName.toLowerCase()) {
+        // console.log(file.leafName);
+        _uc.loadUserChromeCss(file);
       }
     }
   },
@@ -185,7 +188,7 @@ let _uc = {
     }
     Services.console.logMessage(error);
     if (typeof console !== 'undefined' && console.log) {
-      console.log(err, error)
+      console.log(aMsg, err)
     }
   }
 };
