@@ -291,6 +291,7 @@
     if (closeTabOptions && window.TabContextMenu && TabContextMenu.updateContextMenu &&
             !TabContextMenu.__closeLeftTabs) {
         const superUpdateContextMenu = TabContextMenu.updateContextMenu;
+
         function overrideUpdateContextMenuAddCloseTabsFromLeft(aPopupMenu) {
             superUpdateContextMenu.call(this, aPopupMenu);
             let menuItem = document.getElementById('context_closeTabsFromLeft');
@@ -307,6 +308,7 @@
             }
             menuItem.disabled = this.contextTab._tPos === 0;
         }
+
         TabContextMenu.updateContextMenu = overrideUpdateContextMenuAddCloseTabsFromLeft;
         TabContextMenu.updateContextMenu._superFunction = superUpdateContextMenu;
         TabContextMenu.__closeTabsFromLeft = function closeTabsFromLeft(aTab, opt) {
@@ -317,5 +319,159 @@
             }
         };
     }
+
     /// endregion 标签栏右键关闭左侧标签页
+
+    /// region 修复新建标签页加载失败没有内容也不能刷新
+    if (!window.BrowserReloadWithFlags || !BrowserReloadWithFlags.__reloadEmptyFail) {
+        window.BrowserReloadWithFlags = function BrowserReloadWithFlags(reloadFlags) {
+            let unchangedRemoteness = [];
+
+            for (let tab of gBrowser.selectedTabs) {
+                let browser = tab.linkedBrowser;
+                let url = browser.currentURI.spec;
+
+                /// region hack
+                if (url === 'about:blank') {
+                    let doc = tab.ownerDocument;
+                    let input = doc.getElementById('urlbar-input');
+                    if (input && input.value) {
+                        let {value} = input;
+                        let {label} = tab;
+                        let p = ['http', 'https', 'ftp', 'file', 'about', 'chrome'];
+                        for (let i = 0; i < p.length; i++) {
+                            if (value.startsWith(p[i] + '://') &&
+                                    value.slice(p.length + 2) === label) {
+                                url = value;
+                                break;
+                            }
+                        }
+                    }
+
+                }
+                /// endregion hack
+
+                // We need to cache the content principal here because the browser will be
+                // reconstructed when the remoteness changes and the content prinicpal will
+                // be cleared after reconstruction.
+                let principal = tab.linkedBrowser.contentPrincipal;
+                if (gBrowser.updateBrowserRemotenessByURL(browser, url) || url !== browser.currentURI.spec) {
+                    // If the remoteness has changed, the new browser doesn't have any
+                    // information of what was loaded before, so we need to load the previous
+                    // URL again.
+                    if (tab.linkedPanel) {
+                        loadBrowserURI(browser, url, principal);
+                    } else {
+                        // Shift to fully loaded browser and make
+                        // sure load handler is instantiated.
+                        tab.addEventListener(
+                                "SSTabRestoring",
+                                () => loadBrowserURI(browser, url, principal),
+                                {once: true}
+                        );
+                        gBrowser._insertBrowser(tab);
+                    }
+                } else {
+                    unchangedRemoteness.push(tab);
+                }
+            }
+
+            if (!unchangedRemoteness.length) {
+                return;
+            }
+
+            // Reset temporary permissions on the remaining tabs to reload.
+            // This is done here because we only want to reset
+            // permissions on user reload.
+            for (let tab of unchangedRemoteness) {
+                SitePermissions.clearTemporaryPermissions(tab.linkedBrowser);
+                // Also reset DOS mitigations for the basic auth prompt on reload.
+                delete tab.linkedBrowser.authPromptAbuseCounter;
+            }
+            gIdentityHandler.hidePopup();
+
+            let handlingUserInput = window.windowUtils.isHandlingUserInput;
+
+            for (let tab of unchangedRemoteness) {
+                if (tab.linkedPanel) {
+                    sendReloadMessage(tab);
+                } else {
+                    // Shift to fully loaded browser and make
+                    // sure load handler is instantiated.
+                    tab.addEventListener("SSTabRestoring", () => sendReloadMessage(tab), {
+                        once: true,
+                    });
+                    gBrowser._insertBrowser(tab);
+                }
+            }
+
+            function loadBrowserURI(browser, url, principal) {
+                browser.loadURI(url, {
+                    flags: reloadFlags,
+                    triggeringPrincipal: principal,
+                });
+            }
+
+            function sendReloadMessage(tab) {
+                tab.linkedBrowser.sendMessageToActor(
+                        "Browser:Reload",
+                        {flags: reloadFlags, handlingUserInput},
+                        "BrowserTab"
+                );
+            }
+        };
+        window.BrowserReloadWithFlags.__reloadEmptyFail = true;
+    }
+    /// endregion 修复新建标签页加载失败没有内容也不能刷新
+
+    // region 页面右键菜单复制链接文字
+    if (contentAreaContextMenu && !contentAreaContextMenu.___copyLinkText) {
+        const copyLinkText = function copyLinkText() {
+            if (!this || !this._linkTextStr) return false;
+            let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(
+                    Ci.nsIClipboardHelper
+            );
+            clipboard.copyString(this._linkTextStr);
+        };
+        // not making it too long
+        // noinspection UnnecessaryLocalVariableJS
+        // context-copylink
+        const initCopyLinkText = async function initCopyLinkText() {
+            let menu = document.getElementById(
+                    "context-copylink-text");
+            if (!menu) {
+                menu = createXulElement("menuitem", {
+                    "contexttype": "toolbaritem",
+                    "id": "context-copylink-text",
+                    "class": "customize-context-copylink-text",
+                    "label": '复制链接文字',
+                    "oncommand": 'this._copyLinkText()'
+                });
+                let menuItem = document.getElementById('context-copylink');
+                if (!menuItem || !menuItem.parentElement) {
+                    return false;
+                }
+                menuItem.parentElement.insertBefore(menu, menuItem.nextElementSibling);
+            }
+            if (!this.onLink || !this.linkTextStr) {
+                menu.hidden = true;
+                return;
+            }
+            menu.hidden = false;
+            menu._copyLinkText = copyLinkText;
+            menu._linkTextStr = this.linkTextStr;
+        };
+
+        contentAreaContextMenu.addEventListener("popupshowing", function () {
+            if (window.gContextMenu) {
+                initCopyLinkText.call(gContextMenu);
+            }
+        }, {
+            passive: true,
+            capture: false
+        });
+
+        contentAreaContextMenu.___copyLinkText = true;
+    }
+    // endregion 页面右键菜单复制链接文字
 })();
