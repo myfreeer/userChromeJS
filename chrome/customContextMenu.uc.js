@@ -117,7 +117,7 @@
                 }
             }
         };
-        PlacesUIUtils.placesContextShowing = function patchPlacesContextShowing(event) {
+        PlacesUIUtils.placesContextShowing = function placesContextShowingAddHere(event) {
             const ret = placesContextShowing.call(this, event);
             if (!ret) {
                 return ret;
@@ -137,8 +137,9 @@
                         "label": '添加书签到此处',
                         "oncommand": 'PlacesUIUtils.addBookmarkToHere(document.popupNode)'
                     });
+                    // maybe prepend here
                     bookmarkContextMenu.insertBefore(newBookmarkHere,
-                            queryChildren(bookmarkContextMenu, 'placesContext_new:separator'));
+                            bookmarkContextMenu.firstElementChild);
                 }
                 newBookmarkHere.hidden = false;
             } else if (newBookmarkHere) {
@@ -185,6 +186,47 @@
             }
 
             globalThat.StarUI.showConfirmation();
+        };
+
+    }
+    // endregion 书签栏增加添加书签到此处
+
+    // region 书签栏增加复制名称
+    if (bookmarkContextMenu && window.PlacesUIUtils &&
+            window.PlacesUtils &&
+            // already patched??
+            !PlacesUIUtils.copyBookmarkName) {
+        const placesContextShowing = PlacesUIUtils.placesContextShowing;
+        PlacesUIUtils.placesContextShowing = function placesContextShowingCopyText(event) {
+            const ret = placesContextShowing.call(this, event);
+            if (!ret) {
+                return ret;
+            }
+            let bookmarkCopyText =
+                    bookmarkContextMenu.querySelector('#placesContext_copyText');
+            if (!bookmarkCopyText) {
+                bookmarkCopyText = createXulElement("menuitem", {
+                    "selectiontype": "any",
+                    "hideifnoinsertionpoint": "true",
+                    "id": "placesContext_copyText",
+                    "label": '复制名称',
+                    "oncommand": 'PlacesUIUtils.copyBookmarkName(document.popupNode)'
+                });
+                // maybe prepend here
+                bookmarkContextMenu.insertBefore(bookmarkCopyText,
+                        bookmarkContextMenu.querySelector('#placesContext_paste'));
+            }
+            bookmarkCopyText.hidden = false;
+            return ret;
+        };
+        PlacesUIUtils.placesContextShowing._superFunction = placesContextShowing;
+        PlacesUIUtils.copyBookmarkName = async function addBookmarkToHere(popupNode) {
+            popupNode = popupNode || document.popupNode;
+            if (!popupNode || !popupNode.label) return;
+            let clipboard = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(
+                    Ci.nsIClipboardHelper
+            );
+            clipboard.copyString(popupNode.label);
         };
 
     }
@@ -384,11 +426,20 @@
             // This is done here because we only want to reset
             // permissions on user reload.
             for (let tab of unchangedRemoteness) {
-                SitePermissions.clearTemporaryPermissions(tab.linkedBrowser);
+                if (SitePermissions.clearTemporaryBlockPermissions) {
+                    // firefox 88
+                    SitePermissions.clearTemporaryBlockPermissions(tab.linkedBrowser);
+                } else {
+                    SitePermissions.clearTemporaryPermissions(tab.linkedBrowser);
+                }
                 // Also reset DOS mitigations for the basic auth prompt on reload.
                 delete tab.linkedBrowser.authPromptAbuseCounter;
             }
             gIdentityHandler.hidePopup();
+            if (typeof gPermissionPanel !== "undefined" && gPermissionPanel.hidePopup) {
+                // firefox 88
+                gPermissionPanel.hidePopup();
+            }
 
             let handlingUserInput = window.windowUtils.isHandlingUserInput;
 
