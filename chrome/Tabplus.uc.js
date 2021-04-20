@@ -50,14 +50,16 @@ false);
 
 
 // 03. 双击标签页关闭标签页
-gBrowser.tabContainer.addEventListener("dblclick", function (event) {
-    if (event.button == 0 && !event.ctrlKey) {
-        const tab = event.target.closest('.tabbrowser-tab');
-        if (!tab) return;
-        // gBrowser.removeTab(tab);
-        gBrowser.removeTab(tab, {animate: true});
-    }
-}, false);
+if (!Services.prefs.getBoolPref('browser.tabs.closeTabByDblclick')) {
+    gBrowser.tabContainer.addEventListener("dblclick", function (event) {
+        if (event.button == 0 && !event.ctrlKey) {
+            const tab = event.target.closest('.tabbrowser-tab');
+            if (!tab) return;
+            // gBrowser.removeTab(tab);
+            gBrowser.removeTab(tab, {animate: true});
+        }
+    }, false);
+}
 
 
 // 04. 标签栏鼠标滚轮切换标签页
