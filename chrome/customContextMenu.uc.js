@@ -341,6 +341,7 @@
                 menuItem = createXulElement("menuitem", {
                     "contexttype": "toolbaritem",
                     "class": "customize-context-closeTabsFromLeft",
+                    "id": "context_closeTabsFromLeft",
                     // "accesskey": "l",
                     "label": '关闭左侧标签页',
                     "oncommand": 'TabContextMenu.__closeTabsFromLeft(' +
