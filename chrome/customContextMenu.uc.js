@@ -101,6 +101,7 @@
     }
     // endregion 工具栏增加附加组件选项菜单
 
+    // TODO: 替换书签为当前标签页
     // region 书签栏增加添加书签到此处
     const bookmarkContextMenu = document.getElementById('placesContext');
     if (bookmarkContextMenu && window.PlacesUIUtils &&
@@ -123,6 +124,7 @@
                 return ret;
             }
             const node = document.popupNode;
+            // TODO: 书签工具栏
             const isDir = node && node._placesNode &&
                     node._placesNode.bookmarkGuid &&
                     node.getAttribute('container');
@@ -230,7 +232,7 @@
         };
 
     }
-    // endregion 书签栏增加添加书签到此处
+    // endregion 书签栏增加复制名称
 
     // region 页面右键菜单用其他搜索引擎搜索
     if (contentAreaContextMenu && !contentAreaContextMenu.___searchWithOtherSearchEngines) {
@@ -331,7 +333,8 @@
     /// region 标签栏右键关闭左侧标签页
     const closeTabOptions = document.getElementById('closeTabOptions');
     if (closeTabOptions && window.TabContextMenu && TabContextMenu.updateContextMenu &&
-            !TabContextMenu.__closeLeftTabs) {
+            !TabContextMenu.__closeLeftTabs &&
+            !document.getElementById('context_closeTabsToTheStart')) {
         const superUpdateContextMenu = TabContextMenu.updateContextMenu;
 
         function overrideUpdateContextMenuAddCloseTabsFromLeft(aPopupMenu) {
@@ -340,8 +343,8 @@
             if (!menuItem) {
                 menuItem = createXulElement("menuitem", {
                     "contexttype": "toolbaritem",
+                    "id": 'context_closeTabsFromLeft',
                     "class": "customize-context-closeTabsFromLeft",
-                    "id": "context_closeTabsFromLeft",
                     // "accesskey": "l",
                     "label": '关闭左侧标签页',
                     "oncommand": 'TabContextMenu.__closeTabsFromLeft(' +
@@ -476,6 +479,7 @@
     }
     /// endregion 修复新建标签页加载失败没有内容也不能刷新
 
+    // TODO: 作为纯文本粘贴 setTimeout(() => docShell.doCommand('cmd_pasteNoFormatting'), 2000)
     // region 页面右键菜单复制链接文字
     if (contentAreaContextMenu && !contentAreaContextMenu.___copyLinkText) {
         const copyLinkText = function copyLinkText() {
