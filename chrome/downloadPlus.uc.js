@@ -334,11 +334,11 @@
                     }
                 }
 
-                                DownloadsSubview.showOrg = DownloadsSubview.show;
-                DownloadsSubview.show = async function show(anchor) {
-                    DownloadsSubview.showOrg(anchor);
-                    setTimeout(checkStatus, 1000);
-                };
+                //                 DownloadsSubview.showOrg = DownloadsSubview.show;
+                // DownloadsSubview.show = async function show(anchor) {
+                //     DownloadsSubview.showOrg(anchor);
+                //     setTimeout(checkStatus, 1000);
+                // };
 
             } else {
                 //我的足迹下载项列表
