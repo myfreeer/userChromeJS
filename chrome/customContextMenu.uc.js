@@ -123,7 +123,8 @@
             if (!ret) {
                 return ret;
             }
-            const node = document.popupNode;
+            // firefox 91?
+            const node = document.popupNode || event?.target?.triggerNode;
             // TODO: 书签工具栏
             const isDir = node && node._placesNode &&
                     node._placesNode.bookmarkGuid &&
@@ -137,7 +138,8 @@
                         "hideifnoinsertionpoint": "true",
                         "id": "placesContext_new:bookmark_here",
                         "label": '添加书签到此处',
-                        "oncommand": 'PlacesUIUtils.addBookmarkToHere(document.popupNode)'
+                        "oncommand": 'PlacesUIUtils.addBookmarkToHere(' +
+                                'document.popupNode || placesContext.triggerNode)'
                     });
                     // maybe prepend here
                     bookmarkContextMenu.insertBefore(newBookmarkHere,
@@ -212,11 +214,14 @@
                     "hideifnoinsertionpoint": "true",
                     "id": "placesContext_copyText",
                     "label": '复制名称',
-                    "oncommand": 'PlacesUIUtils.copyBookmarkName(document.popupNode)'
+                    "oncommand": 'PlacesUIUtils.copyBookmarkName(' +
+                            'document.popupNode || placesContext.triggerNode)'
                 });
                 // maybe prepend here
-                bookmarkContextMenu.insertBefore(bookmarkCopyText,
-                        bookmarkContextMenu.querySelector('#placesContext_paste'));
+                let pasteMenu = bookmarkContextMenu.querySelector(
+                        parseInt(Services?.appinfo?.version, 10) >= 91 ?
+                                '#placesContext_paste_group' : '#placesContext_paste');
+                bookmarkContextMenu.insertBefore(bookmarkCopyText, pasteMenu);
             }
             bookmarkCopyText.hidden = false;
             return ret;
