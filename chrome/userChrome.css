@@ -81,6 +81,16 @@
         /* endregion 标签栏 */
 
         /* region 压缩高度的菜单 */
+        /* firefox 91 */
+        @media (-moz-windows-non-native-menus) {
+            menupopup > menuitem, menupopup > menu {
+                padding-block: 0.1em !important;
+            }
+            menupopup[needsgutter] menu:not([icon], .menu-iconic),
+            menupopup[needsgutter] menuitem:not([checked="true"], [icon], .menuitem-iconic) {
+                padding-inline-start: 1.3em !important;
+            }
+        }
         .subview-subheader,
         panelview .toolbarbutton-1,
         .subviewbutton,
