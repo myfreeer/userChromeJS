@@ -885,13 +885,19 @@ z-index: 2147483647 !important;`.trim();
             // 如果是最左侧标签页则关闭当前标签并激活最左侧标签
             if (!t._tPos) { // t._tPos === 0
                 gBrowser.removeTab(t);
-                gBrowser.selectedTab = tabs[0];
+                // rejected by onbeforeunload
+                if (t !== gBrowser.selectedTab) {
+                    gBrowser.selectedTab = tabs[0];
+                }
                 return;
             }
             gBrowser.tabContainer.advanceSelectedTab(-1, true);
-            var n = gBrowser.selectedTab;
+            let n = gBrowser.selectedTab;
             gBrowser.removeTab(t);
-            gBrowser.selectedTab = n;
+            // rejected by onbeforeunload
+            if (t !== gBrowser.selectedTab) {
+                gBrowser.selectedTab = n;
+            }
         }
 
         // 关闭当前标签并激活右侧标签
@@ -902,14 +908,20 @@ z-index: 2147483647 !important;`.trim();
             // 如果是最右侧标签页则关闭当前标签并激活最右侧标签
             if (t === lastTab) {
                 gBrowser.removeTab(t);
-                // new last tab
-                gBrowser.selectedTab = tabs[tabs.length - 1];
+                // rejected by onbeforeunload
+                if (t !== gBrowser.selectedTab) {
+                    // new last tab
+                    gBrowser.selectedTab = tabs[tabs.length - 1];
+                }
                 return;
             }
             gBrowser.tabContainer.advanceSelectedTab(1, true);
             let n = gBrowser.selectedTab;
             gBrowser.removeTab(t);
-            gBrowser.selectedTab = n;
+            // rejected by onbeforeunload
+            if (t !== gBrowser.selectedTab) {
+                gBrowser.selectedTab = n;
+            }
         }
 
         // 将当前窗口置顶（未测试）(仅 windows)
