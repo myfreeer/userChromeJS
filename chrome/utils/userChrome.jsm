@@ -4,6 +4,10 @@ const {Services} = ChromeUtils.import('resource://gre/modules/Services.jsm');
 const {xPref} = ChromeUtils.import('chrome://userchromejs/content/xPref.jsm');
 
 let UC = {};
+let ioService = Components.classes["@mozilla.org/network/io-service;1"]
+    .getService(Components.interfaces.nsIIOService)
+    .getProtocolHandler("file")
+    .QueryInterface(Components.interfaces.nsIFileProtocolHandler);
 
 //console.log(1);
 Components.utils.import('resource://gre/modules/osfile.jsm');
@@ -164,12 +168,8 @@ let _uc = {
     }
   },
 
-
-  getURLSpecFromFile: Components.classes["@mozilla.org/network/io-service;1"]
-    .getService(Components.interfaces.nsIIOService)
-    .getProtocolHandler("file")
-    .QueryInterface(Components.interfaces.nsIFileProtocolHandler)
-    .getURLSpecFromFile,
+  // maybe firefox 92
+  getURLSpecFromFile: ioService.getURLSpecFromFile || ioService.getURLSpecFromActualFile,
 
   createElement: function (doc, tag, atts, XUL = true) {
     let el = XUL ? doc.createXULElement(tag) : doc.createElement(tag);
