@@ -45,6 +45,9 @@
         contentAreaContextMenu.addEventListener("popupshowing", function () {
             if (window.gContextMenu) {
                 blockContextMenu.forEach(id => gContextMenu.showItem(id, false));
+                if (gContextMenu.imageInfo?.currentSrc && !gContextMenu.imageURL) {
+                    gContextMenu.imageURL = gContextMenu.imageInfo.currentSrc;
+                }
             }
         }, {
             passive: true,
