@@ -31,8 +31,8 @@
     }
     /* endregion 禁止地址栏放大 */
 
-    /* region Firefox 89 proton */
-    @media (-moz-proton-contextmenus) {
+    /* region Firefox 96 proton no media queries */
+    /*@media (-moz-proton-contextmenus) {*/
         @media (-moz-windows-default-theme) and (-moz-os-version: windows-win10) {
 
             menupopup > menuitem,
@@ -43,8 +43,8 @@
                 padding-bottom: 0 !important;
             }
         }
-    }
-    @media (-moz-proton) {
+    /*}*/
+    /*@media (-moz-proton) {*/
 
         /* region 禁止地址栏放大 */
         #urlbar[breakout][breakout-extend] > #urlbar-input-container {
@@ -108,7 +108,7 @@
         #urlbar[focused="true"]:not([suppress-focus-border]) > #urlbar-background {
             border: none !important;
         }
-    }
+    /*}*/
 
     /* endregion Firefox 89 proton */
 }
