@@ -259,6 +259,7 @@
                             principal.originAttributes
                     ),
                     csp,
+                    false,
                     engines[index]
             );
         };
@@ -301,7 +302,14 @@
                     ? this.textSelected
                     : this.linkTextStr;
             popup.principal = this.principal;
-            popup.engines = await Services.search.getVisibleEngines();
+            let engines = await Services.search.getVisibleEngines();
+            let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
+            let hiddenList = pref ? pref.split(",") : [];
+            engines = (engines || []).filter(e => {
+                let name = e.name;
+                return !hiddenList.includes(name);
+            });
+            popup.engines = engines;
             if (!popup.engines.length) {
                 menu.hidden = true;
                 return;
@@ -394,8 +402,10 @@
                         let {label} = tab;
                         let p = ['http', 'https', 'ftp', 'file', 'about', 'chrome'];
                         for (let i = 0; i < p.length; i++) {
-                            if (value.startsWith(p[i] + '://') &&
-                                    value.slice(p.length + 2) === label) {
+                            let protocol = p[i];
+                            if (value.startsWith(protocol + '://') &&
+                                    (value.slice(p.length + 2) === label ||
+                                    value.slice(p.length + 2) === ('www.' + label))) {
                                 url = value;
                                 break;
                             }
@@ -409,6 +419,7 @@
                 // reconstructed when the remoteness changes and the content prinicpal will
                 // be cleared after reconstruction.
                 let principal = tab.linkedBrowser.contentPrincipal;
+                // hack here
                 if (gBrowser.updateBrowserRemotenessByURL(browser, url) || url !== browser.currentURI.spec) {
                     // If the remoteness has changed, the new browser doesn't have any
                     // information of what was loaded before, so we need to load the previous
@@ -421,7 +432,7 @@
                         tab.addEventListener(
                                 "SSTabRestoring",
                                 () => loadBrowserURI(browser, url, principal),
-                                {once: true}
+                                { once: true }
                         );
                         gBrowser._insertBrowser(tab);
                     }
@@ -438,22 +449,14 @@
             // This is done here because we only want to reset
             // permissions on user reload.
             for (let tab of unchangedRemoteness) {
-                if (SitePermissions.clearTemporaryBlockPermissions) {
-                    // firefox 88
-                    SitePermissions.clearTemporaryBlockPermissions(tab.linkedBrowser);
-                } else {
-                    SitePermissions.clearTemporaryPermissions(tab.linkedBrowser);
-                }
+                SitePermissions.clearTemporaryBlockPermissions(tab.linkedBrowser);
                 // Also reset DOS mitigations for the basic auth prompt on reload.
                 delete tab.linkedBrowser.authPromptAbuseCounter;
             }
             gIdentityHandler.hidePopup();
-            if (typeof gPermissionPanel !== "undefined" && gPermissionPanel.hidePopup) {
-                // firefox 88
-                gPermissionPanel.hidePopup();
-            }
+            gPermissionPanel.hidePopup();
 
-            let handlingUserInput = window.windowUtils.isHandlingUserInput;
+            let handlingUserInput = document.hasValidTransientUserGestureActivation;
 
             for (let tab of unchangedRemoteness) {
                 if (tab.linkedPanel) {
@@ -478,11 +481,12 @@
             function sendReloadMessage(tab) {
                 tab.linkedBrowser.sendMessageToActor(
                         "Browser:Reload",
-                        {flags: reloadFlags, handlingUserInput},
+                        { flags: reloadFlags, handlingUserInput },
                         "BrowserTab"
                 );
             }
-        };
+        }
+
         window.BrowserReloadWithFlags.__reloadEmptyFail = true;
     }
     /// endregion 修复新建标签页加载失败没有内容也不能刷新
