@@ -271,6 +271,11 @@ z-index: 2147483647 !important;`.trim();
                 // transform displays better on firefox
                 canvas.style.transform = 'scale(' + (1 / devicePixelRatio) + ')';
                 canvas.style.transformOrigin = '0 0';
+                // 20221123
+                // fix for firefox 107
+                canvas.style.position = 'absolute';
+                // canvas.style.width = '100%';
+                // canvas.style.height = '100%';
             } else {
                 canvas.width = clientWidth;
                 canvas.height = clientHeight;
