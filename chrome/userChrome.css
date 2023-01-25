@@ -111,6 +111,16 @@
     /*}*/
 
     /* endregion Firefox 89 proton */
+    /* region Firefox 109 large ui padding */
+    :root {
+        --toolbarbutton-inner-padding: 6px !important;
+        --toolbarbutton-border-radius: 1px !important;
+    }
+    toolbar .toolbaritem-combined-buttons {
+        margin-inline: 0 !important;
+    }
+
+    /* endregion Firefox 109 large ui padding */
 }
 
 /* region 更清晰的 canvas */
@@ -126,3 +136,7 @@ url-prefix('file://') {
     }
 }
 /* endregion 更清晰的 canvas */
+
+#advancedPanelButtonContainer > .exceptionDialogButtonContainer > #exceptionDialogButton[hidden] {
+    display: block;
+}
