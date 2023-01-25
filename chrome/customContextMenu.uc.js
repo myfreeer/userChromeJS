@@ -104,6 +104,52 @@
     }
     // endregion 工具栏增加附加组件选项菜单
 
+    // region 工具栏增加附加组件选项菜单 firefox109
+    if (window.gUnifiedExtensions && gUnifiedExtensions.updateContextMenu &&
+            // already patched??
+            !gUnifiedExtensions.openExtensionOption) {
+        const {updateContextMenu} = gUnifiedExtensions;
+        gUnifiedExtensions.updateContextMenu = async function patchContextMenu(menu, event) {
+            const returnValue = await updateContextMenu.call(this, menu, event);
+            const id = this._getExtensionId(menu);
+            const addon = id && (await AddonManager.getAddonByID(id));
+            const optionsURL = addon && addon.optionsURL;
+            let openExtensionOption = menu.querySelector(
+                    ".customize-context-openExtensionOption"
+            );
+            if (optionsURL) {
+                if (!openExtensionOption) {
+                    openExtensionOption = createXulElement("menuitem", {
+                        "contexttype": "toolbaritem",
+                        "class": "customize-context-openExtensionOption",
+                        "label": '选项',
+                        "oncommand":
+                                'gUnifiedExtensions.openExtensionOption(this.parentElement)'
+                    });
+                    menu.insertBefore(openExtensionOption,
+                            menu.querySelector(
+                                    '.unified-extensions-context-menu-manage-extension'));
+                }
+                openExtensionOption.hidden = false;
+            } else if (openExtensionOption) {
+                openExtensionOption.hidden = true;
+                openExtensionOption.oncommand = null;
+            }
+            return returnValue;
+        };
+        gUnifiedExtensions.updateContextMenu._superFunction = updateContextMenu;
+        gUnifiedExtensions.openExtensionOption = async function openExtensionOption(menu) {
+            const id = this._getExtensionId(menu);
+            const addon = id && (await AddonManager.getAddonByID(id));
+            const optionsURL = addon && addon.optionsURL;
+            if (!optionsURL) {
+                return;
+            }
+            gBrowser.selectedTab = gBrowser.addTrustedTab(optionsURL);
+        };
+    }
+    // endregion 工具栏增加附加组件选项菜单 firefox109
+
     // TODO: 替换书签为当前标签页
     // region 书签栏增加添加书签到此处
     const bookmarkContextMenu = document.getElementById('placesContext');
@@ -402,7 +448,7 @@
                         let {label} = tab;
                         let p = ['http', 'https', 'ftp', 'file', 'about', 'chrome'];
                         for (let i = 0; i < p.length; i++) {
-                            let protocol = p[i];
+							let protocol = p[i];
                             if (value.startsWith(protocol + '://') &&
                                     (value.slice(p.length + 2) === label ||
                                     value.slice(p.length + 2) === ('www.' + label))) {
