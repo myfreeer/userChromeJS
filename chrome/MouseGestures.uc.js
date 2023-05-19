@@ -800,12 +800,16 @@ z-index: 2147483647 !important;`.trim();
 
         // 刷新当前页面
         static reloadCurrentPage() {
-            document.getElementById("Browser:Reload").doCommand();
+            const reload = document.getElementById("Browser:Reload");
+            reload.removeAttribute('disabled');
+            reload.doCommand();
         }
 
         // 刷新当前页面
         static reloadCurrentPageSkipCache() {
-            document.getElementById("Browser:ReloadSkipCache").doCommand();
+            const reload = document.getElementById("Browser:ReloadSkipCache");
+            reload.removeAttribute('disabled');
+            reload.doCommand();
         }
 
         // 打开新标签
