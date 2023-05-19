@@ -118,8 +118,11 @@
     }
     toolbar .toolbaritem-combined-buttons {
         margin-inline: 0 !important;
+        padding-inline: 2px !important;
     }
-
+    .titlebar-spacer[type="pre-tabs"], .titlebar-spacer[type="post-tabs"] {
+        display: none;
+    }
     /* endregion Firefox 109 large ui padding */
 }
 
