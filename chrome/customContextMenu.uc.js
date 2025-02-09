@@ -311,7 +311,7 @@
         };
         // not making it too long
         // noinspection UnnecessaryLocalVariableJS
-        const initSearch = async function showAndFormatOtherSearchContextItem() {
+        const initSearch = async function showAndFormatOtherSearchContextItem(contextMenu) {
             let menu = document.getElementById(
                     "context-searchselect-other-parent");
             let popup = document.getElementById("context-searchselect-other");
@@ -336,32 +336,31 @@
                 return;
             }
             const showSearchSelect =
-                    !this.inAboutDevtoolsToolbox &&
-                    (this.isTextSelected || this.onLink) &&
-                    !this.onImage;
+                    !contextMenu.inAboutDevtoolsToolbox &&
+                    (contextMenu.isTextSelected || contextMenu.onLink) &&
+                    !contextMenu.onImage;
             if (!showSearchSelect) {
                 menu.hidden = true;
                 return;
             }
             menu.hidden = false;
-            popup.searchTerms = this.isTextSelected
-                    ? this.textSelected
-                    : this.linkTextStr;
-            popup.principal = this.principal;
+            popup.searchTerms = contextMenu.isTextSelected
+                    ? contextMenu.textSelected || contextMenu.selectedText // firefox 130
+                    : contextMenu.linkTextStr;
+            popup.principal = contextMenu.principal;
             let engines = await Services.search.getVisibleEngines();
-            let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
-            let hiddenList = pref ? pref.split(",") : [];
+            // let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
+            // let hiddenList = pref ? pref.split(",") : [];
             engines = (engines || []).filter(e => {
-                let name = e.name;
-                return !hiddenList.includes(name);
+                return !e?._metaData?.hideOneOffButton;
             });
             popup.engines = engines;
             if (!popup.engines.length) {
                 menu.hidden = true;
                 return;
             }
-            popup.usePrivate = PrivateBrowsingUtils.isBrowserPrivate(this.browser);
-            popup.csp = this.csp;
+            popup.usePrivate = PrivateBrowsingUtils.isBrowserPrivate(contextMenu.browser);
+            popup.csp = contextMenu.csp;
             for (let i = 0; i < popup.engines.length; i++) {
                 let menuItem = popup.children[i];
                 if (!menuItem) {
@@ -381,7 +380,7 @@
 
         contentAreaContextMenu.addEventListener("popupshowing", function () {
             if (window.gContextMenu) {
-                initSearch.call(gContextMenu);
+                initSearch.call(gContextMenu, gContextMenu);
             }
         }, {
             passive: true,
