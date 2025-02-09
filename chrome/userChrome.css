@@ -15,7 +15,8 @@
     #urlbar[breakout][breakout-extend-disabled][open] {
         /*height: var(--urlbar-height) !important;*/
         width: 100% !important;
-        top: calc((var(--urlbar-toolbar-height) - var(--urlbar-height)) / 2) !important;
+        /* since firefox 128 */
+        /*top: calc((var(--urlbar-toolbar-height) - var(--urlbar-height)) / 2) !important;*/
         left: 0 !important;
     }
 
@@ -29,6 +30,12 @@
     #urlbar[breakout][breakout-extend] > #urlbar-background {
         animation: none !important;
     }
+        /* since firefox 128 */
+    #urlbar[breakout][breakout-extend] {
+  & > .urlbar-input-container {
+    padding-inline: 1px !important;
+  }
+}
     /* endregion 禁止地址栏放大 */
 
     /* region Firefox 96 proton no media queries */
@@ -124,6 +131,28 @@
         display: none;
     }
     /* endregion Firefox 109 large ui padding */
+
+    /* region Firefox 120 large ui padding */
+    @media (-moz-platform: windows) {
+	  
+            menupopup > menuitem,
+            menupopup > menu {
+                padding-block: 0 !important;
+            }
+            #context-navigation:not([hidden]) {
+                padding-bottom: 0 !important;
+            }
+    }
+	
+			@media (-moz-platform: windows) {
+  menupopup > menuitem, menupopup > menu {
+    padding-inline-start: 1em !important;
+  }
+}
+	menupopup[needsgutter] menu:not([icon], .menu-iconic), menupopup[needsgutter] menuitem:not([checked="true"], [icon], .menuitem-iconic) {
+  padding-inline-start: 1em !important;
+}
+    /* endregion Firefox 120 large ui padding */
 }
 
 /* region 更清晰的 canvas */

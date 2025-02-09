@@ -471,7 +471,24 @@
                     // information of what was loaded before, so we need to load the previous
                     // URL again.
                     if (tab.linkedPanel) {
+                        try {
                         loadBrowserURI(browser, url, principal);
+                        } catch (e) {
+                            // Uncaught TypeError: 'uri' member of CancelContentJSOptions is not an object.
+                            // WTF is this in 112?
+                            console.warn('loadBrowserURI', url, e);
+                            let doc = tab.ownerDocument;
+                            let input = doc.getElementById('urlbar-input');
+                            if (input && input.value === url) {
+                                input.dispatchEvent(new KeyboardEvent('keydown', {
+                                    key: 'Enter',
+                                    code: 'Enter',
+                                    charCode: 13,
+                                    keyCode: 13,
+                                    which: 13
+                                }));
+                            }
+                        }
                     } else {
                         // Shift to fully loaded browser and make
                         // sure load handler is instantiated.
