@@ -605,4 +605,23 @@
         contentAreaContextMenu.___copyLinkText = true;
     }
     // endregion 页面右键菜单复制链接文字
+
+    // region firefox 130 新建标签页打开图像，打开了两个
+    const viewMedia = nsContextMenu.prototype.viewMedia;
+    if (!nsContextMenu.prototype.__noDuplicateViewMedia) {
+        nsContextMenu.prototype.__noDuplicateViewMedia = true;
+        nsContextMenu.prototype.viewMedia = function (e) {
+            let str;
+            if (e && e.type === 'command' &&
+                e.target &&
+                e.target.id === 'context-viewimage' &&
+                (str = e.target.getAttribute('oncommand')) &&
+                str.includes('openTrustedLinkIn')
+            ) {
+                return;
+            }
+            return viewMedia.apply(this, arguments);
+        };
+    }
+    // endregion firefox 130 新建标签页打开图像，打开了两个
 })();
