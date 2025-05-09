@@ -169,9 +169,6 @@
         };
         PlacesUIUtils.placesContextShowing = function placesContextShowingAddHere(event) {
             const ret = placesContextShowing.call(this, event);
-            if (!ret) {
-                return ret;
-            }
             // firefox 91?
             const node = document.popupNode || event?.target?.triggerNode;
             // TODO: 书签工具栏
@@ -252,9 +249,6 @@
         const placesContextShowing = PlacesUIUtils.placesContextShowing;
         PlacesUIUtils.placesContextShowing = function placesContextShowingCopyText(event) {
             const ret = placesContextShowing.call(this, event);
-            if (!ret) {
-                return ret;
-            }
             let bookmarkCopyText =
                     bookmarkContextMenu.querySelector('#placesContext_copyText');
             if (!bookmarkCopyText) {
@@ -311,7 +305,7 @@
         };
         // not making it too long
         // noinspection UnnecessaryLocalVariableJS
-        const initSearch = async function showAndFormatOtherSearchContextItem(contextMenu) {
+        const initSearch = async function showAndFormatOtherSearchContextItem() {
             let menu = document.getElementById(
                     "context-searchselect-other-parent");
             let popup = document.getElementById("context-searchselect-other");
@@ -336,31 +330,39 @@
                 return;
             }
             const showSearchSelect =
-                    !contextMenu.inAboutDevtoolsToolbox &&
-                    (contextMenu.isTextSelected || contextMenu.onLink) &&
-                    !contextMenu.onImage;
+                    !this.inAboutDevtoolsToolbox &&
+                    (this.isTextSelected || this.onLink) &&
+                    !this.onImage;
             if (!showSearchSelect) {
                 menu.hidden = true;
                 return;
             }
             menu.hidden = false;
-            popup.searchTerms = contextMenu.isTextSelected
-                    ? contextMenu.textSelected || contextMenu.selectedText // firefox 130
-                    : contextMenu.linkTextStr;
-            popup.principal = contextMenu.principal;
+            popup.searchTerms = this.isTextSelected
+                    ? this.textSelected
+                    : this.linkTextStr;
+            popup.principal = this.principal;
             let engines = await Services.search.getVisibleEngines();
-            // let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
-            // let hiddenList = pref ? pref.split(",") : [];
-            engines = (engines || []).filter(e => {
-                return !e?._metaData?.hideOneOffButton;
-            });
+            try {
+                let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
+                let hiddenList = pref ? pref.split(",") : [];
+                engines = (engines || []).filter(e => {
+                    let name = e.name;
+                    return !hiddenList.includes(name);
+                });
+            } catch {
+                // firefox 137
+                engines = (engines || []).filter(e => {
+                    return !e._metaData?.hideOneOffButton;
+                });
+            }
             popup.engines = engines;
             if (!popup.engines.length) {
                 menu.hidden = true;
                 return;
             }
-            popup.usePrivate = PrivateBrowsingUtils.isBrowserPrivate(contextMenu.browser);
-            popup.csp = contextMenu.csp;
+            popup.usePrivate = PrivateBrowsingUtils.isBrowserPrivate(this.browser);
+            popup.csp = this.csp;
             for (let i = 0; i < popup.engines.length; i++) {
                 let menuItem = popup.children[i];
                 if (!menuItem) {
@@ -380,7 +382,7 @@
 
         contentAreaContextMenu.addEventListener("popupshowing", function () {
             if (window.gContextMenu) {
-                initSearch.call(gContextMenu, gContextMenu);
+                initSearch.call(gContextMenu);
             }
         }, {
             passive: true,
