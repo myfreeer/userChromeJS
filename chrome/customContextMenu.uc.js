@@ -16,6 +16,12 @@
     const createXulElement = (tagName, attr) => {
         const element = document.createXULElement(tagName);
         if (attr) {
+            var match = navigator.userAgent.match(/Firefox\/(\d+)/i);
+            if (match && match[1] && match[1] >= 139 && attr.oncommandFunction) {
+                delete attr.oncommand;
+                element.addEventListener("click", attr.oncommandFunction, {capture: true});
+            }
+            delete attr.oncommandFunction;
             for (const k of Object.keys(attr)) {
                 element.setAttribute(k, attr[k]);
             }
@@ -78,7 +84,10 @@
                         "class": "customize-context-openExtensionOption",
                         "label": '选项',
                         "oncommand":
-                                'ToolbarContextMenu.openExtensionOption(this.parentElement)'
+                                'ToolbarContextMenu.openExtensionOption(this.parentElement)',
+                        oncommandFunction : function () {
+                            ToolbarContextMenu.openExtensionOption(this.parentElement);
+                        },
                     });
                     popup.insertBefore(openExtensionOption,
                             popup.querySelector(
@@ -124,7 +133,10 @@
                         "class": "customize-context-openExtensionOption",
                         "label": '选项',
                         "oncommand":
-                                'gUnifiedExtensions.openExtensionOption(this.parentElement)'
+                                'gUnifiedExtensions.openExtensionOption(this.parentElement)',
+                        oncommandFunction : function () {
+                            gUnifiedExtensions.openExtensionOption(this.parentElement);
+                        },
                     });
                     menu.insertBefore(openExtensionOption,
                             menu.querySelector(
@@ -185,7 +197,10 @@
                         "id": "placesContext_new:bookmark_here",
                         "label": '添加书签到此处',
                         "oncommand": 'PlacesUIUtils.addBookmarkToHere(' +
-                                'document.popupNode || placesContext.triggerNode)'
+                                'document.popupNode || placesContext.triggerNode)',
+                        oncommandFunction : function () {
+                            PlacesUIUtils.addBookmarkToHere(document.popupNode || placesContext.triggerNode);
+                        },
                     });
                     // maybe prepend here
                     bookmarkContextMenu.insertBefore(newBookmarkHere,
@@ -258,7 +273,10 @@
                     "id": "placesContext_copyText",
                     "label": '复制名称',
                     "oncommand": 'PlacesUIUtils.copyBookmarkName(' +
-                            'document.popupNode || placesContext.triggerNode)'
+                            'document.popupNode || placesContext.triggerNode)',
+                    oncommandFunction : function () {
+                        PlacesUIUtils.copyBookmarkName(document.popupNode || placesContext.triggerNode);
+                    },
                 });
                 // maybe prepend here
                 let pasteMenu = bookmarkContextMenu.querySelector(
@@ -288,6 +306,24 @@
             if (!this) return false;
             const {engines, principal, searchTerms, usePrivate, csp} = this;
             if (!engines || !engines[index]) return false;
+            // firefox 141
+			if (typeof BrowserSearch === 'undefined') {
+                SearchUIUtils._loadSearch(
+                    window,
+                    searchTerms,
+                    usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)
+                        ? "window"
+                        : "tab",
+                    usePrivate,
+                    Services.scriptSecurityManager.createNullPrincipal(
+                        principal.originAttributes
+                    ),
+                    csp,
+                    false,
+                    engines[index]
+                )
+                return;
+            }
             BrowserSearch._loadSearch(
                     searchTerms,
                     usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)
@@ -370,7 +406,10 @@
                         "contexttype": "toolbaritem",
                         "class": "customize-context-openExtensionOption",
                         "label": popup.engines[i].name,
-                        "oncommand": 'this.parentElement._searchWithOther(' + i + ')'
+                        "oncommand": 'this.parentElement._searchWithOther(' + i + ')',
+                        oncommandFunction : function () {
+                            this.parentElement._searchWithOther(i);
+                        },
                     });
                     popup.appendChild(menuItem);
                 } else {
@@ -411,7 +450,10 @@
                     // "accesskey": "l",
                     "label": '关闭左侧标签页',
                     "oncommand": 'TabContextMenu.__closeTabsFromLeft(' +
-                            'TabContextMenu.contextTab, {animate: true});'
+                            'TabContextMenu.contextTab, {animate: true});',
+                    oncommandFunction : function () {
+                        TabContextMenu.__closeTabsFromLeft(TabContextMenu.contextTab, {animate: true});
+                    },
                 });
                 closeTabOptions.prepend(menuItem);
             }
@@ -577,7 +619,10 @@
                     "id": "context-copylink-text",
                     "class": "customize-context-copylink-text",
                     "label": '复制链接文字',
-                    "oncommand": 'this._copyLinkText()'
+                    "oncommand": 'this._copyLinkText()',
+                    oncommandFunction : function () {
+                        this._copyLinkText();
+                    },
                 });
                 let menuItem = document.getElementById('context-copylink');
                 if (!menuItem || !menuItem.parentElement) {
@@ -608,21 +653,21 @@
     // endregion 页面右键菜单复制链接文字
 
     // region firefox 130 新建标签页打开图像，打开了两个
-    const viewMedia = nsContextMenu.prototype.viewMedia;
-    if (!nsContextMenu.prototype.__noDuplicateViewMedia) {
-        nsContextMenu.prototype.__noDuplicateViewMedia = true;
-        nsContextMenu.prototype.viewMedia = function (e) {
-            let str;
-            if (e && e.type === 'command' &&
-                e.target &&
-                e.target.id === 'context-viewimage' &&
-                (str = e.target.getAttribute('oncommand')) &&
-                str.includes('openTrustedLinkIn')
-            ) {
-                return;
-            }
-            return viewMedia.apply(this, arguments);
-        };
-    }
+    // const viewMedia = nsContextMenu.prototype.viewMedia;
+    // if (!nsContextMenu.prototype.__noDuplicateViewMedia) {
+    //     nsContextMenu.prototype.__noDuplicateViewMedia = true;
+    //     nsContextMenu.prototype.viewMedia = function (e) {
+    //         let str;
+    //         if (e && e.type === 'command' &&
+    //             e.target &&
+    //             e.target.id === 'context-viewimage' &&
+    //             (str = e.target.getAttribute('oncommand')) &&
+    //             str.includes('openTrustedLinkIn')
+    //         ) {
+    //             return;
+    //         }
+    //         return viewMedia.apply(this, arguments);
+    //     };
+    // }
     // endregion firefox 130 新建标签页打开图像，打开了两个
 })();

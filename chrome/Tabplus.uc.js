@@ -85,9 +85,9 @@ if (!Services.prefs.getBoolPref('browser.tabs.closeTabByDblclick')) {
 
 
 // 05. 在新标签页查看图片
-location.href.startsWith('chrome://browser/content/browser.x') && (function () {
-    document.querySelector("#context-viewimage").setAttribute("oncommand", 'openTrustedLinkIn(gContextMenu.imageURL,"tab")');
-})();
+// location.href.startsWith('chrome://browser/content/browser.x') && (function () {
+//     document.querySelector("#context-viewimage").setAttribute("oncommand", 'openTrustedLinkIn(gContextMenu.imageURL,"tab")');
+// })();
 
 
 // 06. 鼠标移动到地址栏和搜索栏时自动全选里面的文字
@@ -183,6 +183,10 @@ var autselectpsearchbar = document.getElementById("searchbar");
         return;
     // monkey-patch for more information
     const {_insertTabAtIndex: superInsertTabAtIndex} = gBrowser;
+    if (!superInsertTabAtIndex) {
+        // firefox 139
+        return;
+    }
     gBrowser._insertTabAtIndex = monkeyPatchInsertTabAtIndexByTabPlus;
 
     // https://github.com/mozilla/gecko-dev/blob/969fc7fa6c3c7fc489f53b7b7f8c902028b5169f/browser/base/content/tabbrowser.js
@@ -222,6 +226,72 @@ var autselectpsearchbar = document.getElementById("searchbar");
     }
 
     monkeyPatchInsertTabAtIndexByTabPlus._superFunction = superInsertTabAtIndex;
+
+})();
+
+// 10. 在当前标签页右侧打开新标签页 (after 139)
+(function () {
+    if (!location.href.startsWith('chrome://browser/content/browser.x'))
+        return;
+    // monkey-patch for more information
+    const {_insertTabAtIndex: superInsertTabAtIndex} = gBrowser;
+    if (superInsertTabAtIndex) {
+        // firefox 139
+        return;
+    }
+    const superAddTab = gBrowser.addTab;
+    gBrowser.addTab = monkeyPatchAddTab;
+
+    function monkeyPatchAddTab(uriString, params = {}) {
+        // console.log(tab, params);
+        let {
+            bulkOrderedOpen,
+            index,
+            // 141
+            tabIndex,
+            ownerTab,
+            openerBrowser,
+            relatedToCurrent,
+            pinned,
+        } = params;
+        if (tabIndex !== undefined) {
+            index = tabIndex;
+        }
+
+        let openerTab =
+            (openerBrowser && this.getTabForBrowser(openerBrowser)) ||
+            (relatedToCurrent && this.selectedTab) ||
+            null;
+        let {selectedTab} = gBrowser;
+        // 在当前标签页打开标签
+        if (!bulkOrderedOpen &&
+            ownerTab === selectedTab &&
+            ownerTab === openerTab &&
+            typeof index === 'number') {
+            // 在当前标签页右侧打开新标签页
+            params.index = selectedTab._tPos + 1;
+            // 鼠标中键打开
+        } else if (index === undefined &&
+            openerTab === selectedTab &&
+            !bulkOrderedOpen && !pinned) {
+            // 在当前标签页右侧打开新标签页
+            params.index = selectedTab._tPos + 1;
+        } else {
+            params.index = index;
+        }
+        params.tabIndex = params.index;
+        /*
+        恢复关闭的标签页：
+        bulkOrderedOpen: undefined
+        index: number
+        openerTab: false
+        ownerTab: undefined
+        pinned: undefined
+         */
+        return superAddTab.call(this, uriString, params);
+    }
+
+    monkeyPatchAddTab._superFunction = superAddTab;
 
 })();
 

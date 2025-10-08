@@ -156,6 +156,30 @@
   padding-inline-start: 1em !important;
 }
     /* endregion Firefox 120 large ui padding */
+    /* region Firefox 139 bookmark */
+    @media (-moz-platform: windows) {
+
+            menupopup > menuitem.bookmark-item,
+            menupopup > menu.bookmark-item {
+                line-height: 2em;
+            }
+    }
+    /* endregion Firefox 139 bookmark */
+
+    /* region Firefox 141 bookmark */
+    #placesContext menu,
+    #placesContext menuitem,
+    #placesContext menucaption {
+      margin-left: -1em !important;
+    }
+    /* endregion Firefox 141 bookmark */
+
+    /* region Firefox 141 url bar */
+    #urlbar[breakout][breakout-extend] {
+      --urlbar-margin-inline: 0px;
+    }
+    /* endregion Firefox 141 url bar */
+
 }
 
 /* region 更清晰的 canvas */

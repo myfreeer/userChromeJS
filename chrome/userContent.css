@@ -1,0 +1,16 @@
+
+@-moz-document url("about:home"), url("about:newtab") {
+
+.layout-variant-a .top-sites-list, .layout-variant-b .top-sites-list {
+  row-gap: 0 !important;
+}
+@media (min-width: 1122px) {
+  main {
+    width: 950px !important;
+  }
+}
+.logo-and-wordmark-wrapper {
+  display: none !important;
+}
+
+}
