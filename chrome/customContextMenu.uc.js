@@ -308,6 +308,28 @@
             if (!engines || !engines[index]) return false;
             // firefox 141
 			if (typeof BrowserSearch === 'undefined') {
+                if (SearchUIUtils._loadSearch.length === 1) {
+                    // firefox 144
+                    // WTF moz changes the API so fast
+
+                    SearchUIUtils._loadSearch({
+                        window,
+                        searchText: searchTerms,
+                        where: usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)
+                            ? "window"
+                            : "tab",
+                        usePrivate,
+                        triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal(
+                            principal.originAttributes
+                        ),
+                        policyContainer: null,
+                        inBackground: false,
+                        engine: engines[index],
+                        tab: null,
+                        searchUrlType: null,
+                    });
+                    return;
+                }
                 SearchUIUtils._loadSearch(
                     window,
                     searchTerms,
@@ -375,7 +397,7 @@
             }
             menu.hidden = false;
             popup.searchTerms = this.isTextSelected
-                    ? this.textSelected
+                    ? this.textSelected || this.selectedText // this.selectedText for firefox 144
                     : this.linkTextStr;
             popup.principal = this.principal;
             let engines = await Services.search.getVisibleEngines();
