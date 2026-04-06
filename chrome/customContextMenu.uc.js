@@ -307,8 +307,28 @@
             const {engines, principal, searchTerms, usePrivate, csp} = this;
             if (!engines || !engines[index]) return false;
             // firefox 141
-			if (typeof BrowserSearch === 'undefined') {
-                if (SearchUIUtils._loadSearch.length === 1) {
+            if (typeof BrowserSearch === 'undefined') {
+                if (!SearchUIUtils._loadSearch && SearchUIUtils.loadSearch) {
+                    // firefox 149
+                    // WTF moz changes the API so fast
+                    SearchUIUtils.loadSearch({
+                        window,
+                        searchText: searchTerms,
+                        where: usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)
+                            ? "window"
+                            : "tab",
+                        usePrivate,
+                        triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal(
+                            principal.originAttributes
+                        ),
+                        policyContainer: null,
+                        inBackground: false,
+                        engine: engines[index],
+                        tab: null,
+                        searchUrlType: null,
+                    });
+                    return;
+                } else if (SearchUIUtils._loadSearch.length === 1) {
                     // firefox 144
                     // WTF moz changes the API so fast
 
@@ -383,7 +403,7 @@
                 });
                 menu.appendChild(popup);
             }
-            if (!Services.search.isInitialized) {
+            if (!(typeof SearchUIUtils === 'object' && SearchUIUtils.initialized || typeof Services.search !== 'undefined' && Services.search.isInitialized)) {
                 menu.hidden = true;
                 return;
             }
@@ -400,7 +420,15 @@
                     ? this.textSelected || this.selectedText // this.selectedText for firefox 144
                     : this.linkTextStr;
             popup.principal = this.principal;
-            let engines = await Services.search.getVisibleEngines();
+            let engines;
+            if (typeof Services.search !== 'undefined') {
+                engines = await Services.search.getVisibleEngines();
+            } else {
+                let searchLoader = XPCOMUtils.declareLazy({
+                    SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
+                });
+                engines = await searchLoader.SearchService.getVisibleEngines();
+            }
             try {
                 let pref = Services.prefs.getStringPref("browser.search.hiddenOneOffs");
                 let hiddenList = pref ? pref.split(",") : [];
