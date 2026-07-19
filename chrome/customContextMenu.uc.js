@@ -300,6 +300,233 @@
     }
     // endregion 书签栏增加复制名称
 
+    // region 书签栏增加在身份标签打开全部
+    if (bookmarkContextMenu && window.PlacesUIUtils &&
+            window.PlacesUtils &&
+            // already patched??
+            !PlacesUIUtils.openContainerInContainerTabs) {
+        const placesContextShowing = PlacesUIUtils.placesContextShowing;
+        const getPlacesContextChild = id => {
+            let c = bookmarkContextMenu.children;
+            for (let i = 0; i < c.length; i++) {
+                if (c[i].id === id) {
+                    return c[i];
+                }
+            }
+        };
+        const getOpenAllBookmarksItem = () => {
+            let item = getPlacesContextChild(
+                    'placesContext_openBookmarkContainer:tabs');
+            return item || getPlacesContextChild('placesContext_openContainer:tabs');
+        };
+        const getVisibleOpenAllBookmarksItem = () => {
+            for (let id of [
+                'placesContext_openBookmarkContainer:tabs',
+                'placesContext_openContainer:tabs',
+            ]) {
+                let item = getPlacesContextChild(id);
+                if (item && !item.hidden) {
+                    return item;
+                }
+            }
+            return getOpenAllBookmarksItem();
+        };
+        const placeAfterOpenAllBookmarks = menu => {
+            let openContainerInTabs = getVisibleOpenAllBookmarksItem();
+            if (openContainerInTabs &&
+                    menu.previousElementSibling !== openContainerInTabs) {
+                bookmarkContextMenu.insertBefore(menu,
+                        openContainerInTabs.nextElementSibling);
+            } else if (!menu.parentElement) {
+                bookmarkContextMenu.appendChild(menu);
+            }
+        };
+        const getURLsForContextContainer = triggerNode => {
+            if (!triggerNode) {
+                return [];
+            }
+            if (triggerNode.closest?.("#managed-bookmarks")) {
+                let menuitems = triggerNode.menupopup?.children || [];
+                let items = [];
+                for (let i = 0; i < menuitems.length; i++) {
+                    if (menuitems[i].link) {
+                        items.push({
+                            uri: menuitems[i].link,
+                            isBookmark: true,
+                        });
+                    }
+                }
+                return items;
+            }
+            let view = PlacesUIUtils.getViewForNode(triggerNode);
+            let node = view?.selectedNode;
+            if (!node || !PlacesUtils.nodeIsContainer(node)) {
+                node = triggerNode._placesNode;
+            }
+            if (!node || !PlacesUtils.nodeIsContainer(node)) {
+                return [];
+            }
+            return PlacesUtils.getURLsForContainerNode(node);
+        };
+        const ensureOpenContainerInContainerTabs = () => {
+            let menu = getPlacesContextChild(
+                    'placesContext_openContainer:containerTabs');
+            if (menu) {
+                placeAfterOpenAllBookmarks(menu);
+                return menu;
+            }
+            menu = createXulElement("menu", {
+                "id": "placesContext_openContainer:containerTabs",
+                "label": '在身份标签打开全部',
+                "selectiontype": "single",
+                "selection-type": "single|none",
+                "node-type": "folder|query_tag|query",
+                "hide-if-usercontext-disabled": "true",
+            });
+            let popup = createXulElement("menupopup");
+            popup.addEventListener("command", function (event) {
+                PlacesUIUtils.openContainerInContainerTabs(event);
+            }, {
+                passive: true,
+                capture: false
+            });
+            popup.addEventListener("popupshowing", function (event) {
+                PlacesUIUtils.createContainerTabMenu(event);
+            }, {
+                passive: true,
+                capture: false
+            });
+            menu.appendChild(popup);
+
+            placeAfterOpenAllBookmarks(menu);
+            return menu;
+        };
+
+        PlacesUIUtils.placesContextShowing =
+                function placesContextShowingOpenContainerInContainerTabs(event) {
+            const ret = placesContextShowing.call(this, event);
+            if (event?.target?.id !== 'placesContext') {
+                return ret;
+            }
+
+            let menu = ensureOpenContainerInContainerTabs();
+            let openContainerInTabs = getVisibleOpenAllBookmarksItem();
+            let triggerNode = PlacesUIUtils.lastContextMenuTriggerNode ||
+                    bookmarkContextMenu.triggerNode ||
+                    document.popupNode;
+            let hideForUserContext = !Services.prefs.getBoolPref(
+                    "privacy.userContext.enabled", false);
+            let openContainerInTabsVisible = openContainerInTabs &&
+                    !openContainerInTabs.hidden;
+            let isContainer = openContainerInTabsVisible ||
+                    triggerNode?.hasAttribute?.('container');
+            let urls = isContainer ? getURLsForContextContainer(triggerNode) : [];
+            menu.hidden = hideForUserContext || !isContainer ||
+                    !!openContainerInTabs?.hidden;
+            menu.disabled = !urls.length || !!openContainerInTabs?.disabled;
+            return ret;
+        };
+        PlacesUIUtils.placesContextShowing._superFunction = placesContextShowing;
+        PlacesUIUtils.openContainerInContainerTabs =
+                function openContainerInContainerTabs(event) {
+            let userContextId = parseInt(
+                    event?.target?.getAttribute("data-usercontextid"), 10);
+            if (!Number.isInteger(userContextId)) {
+                return;
+            }
+            let triggerNode = PlacesUIUtils.lastContextMenuTriggerNode ||
+                    bookmarkContextMenu.triggerNode ||
+                    document.popupNode;
+            let win = triggerNode?.ownerGlobal || event.target.ownerGlobal || window;
+            let items = getURLsForContextContainer(triggerNode);
+            if (!items.length) {
+                return;
+            }
+            try {
+                let {OpenInTabsUtils} = ChromeUtils.importESModule(
+                        "moz-src:///browser/components/tabbrowser/OpenInTabsUtils.sys.mjs");
+                if (!OpenInTabsUtils.confirmOpenInTabs(items.length, win)) {
+                    return;
+                }
+            } catch (ex) {
+                Cu.reportError(ex);
+            }
+            if (win.updateTelemetry) {
+                win.updateTelemetry(items);
+            }
+            PlacesUIUtils.openTabsetInUserContext(
+                    items, event, win, userContextId);
+        };
+        PlacesUIUtils.openTabsetInUserContext =
+                function openTabsetInUserContext(items, event, win, userContextId) {
+            let browserWindow = win?.gBrowser
+                    ? win
+                    : Services.wm.getMostRecentWindow("navigator:browser");
+            if (!browserWindow?.gBrowser) {
+                return;
+            }
+
+            let urls = [];
+            let isPrivate = false;
+            try {
+                let {PrivateBrowsingUtils} = ChromeUtils.importESModule(
+                        "resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+                isPrivate = PrivateBrowsingUtils.isWindowPrivate(browserWindow);
+            } catch (ex) {
+                Cu.reportError(ex);
+            }
+            for (let item of items) {
+                urls.push(item.uri);
+                if (isPrivate) {
+                    continue;
+                }
+
+                if (item.isBookmark) {
+                    PlacesUIUtils.markPageAsFollowedBookmark(item.uri);
+                } else {
+                    PlacesUIUtils.markPageAsTyped(item.uri);
+                }
+            }
+
+            let loadInBackground = false;
+            try {
+                let {BrowserUtils} = ChromeUtils.importESModule(
+                        "resource://gre/modules/BrowserUtils.sys.mjs");
+                loadInBackground =
+                        BrowserUtils.whereToOpenLink(event, false, true) ===
+                        "tabshifted";
+            } catch (ex) {
+                Cu.reportError(ex);
+            }
+
+            let tabs = browserWindow.gBrowser.loadTabs(urls, {
+                inBackground: loadInBackground,
+                replace: false,
+                triggeringPrincipal:
+                        Services.scriptSecurityManager.getSystemPrincipal(),
+                userContextId,
+            });
+
+            try {
+                let {WebNavigationManager} = ChromeUtils.importESModule(
+                        "resource://gre/modules/WebNavigation.sys.mjs");
+                for (const [i, tab] of tabs.entries()) {
+                    let item = items[i];
+                    if (item.isBookmark && !item.uri.startsWith("javascript:")) {
+                        WebNavigationManager.setRecentTabTransitionData(
+                                { auto_bookmark: true },
+                                tab.linkedBrowser
+                        );
+                    }
+                }
+            } catch (ex) {
+                Cu.reportError(ex);
+            }
+        };
+
+    }
+    // endregion 书签栏增加在身份标签打开全部
+
     // region 页面右键菜单用其他搜索引擎搜索
     if (contentAreaContextMenu && !contentAreaContextMenu.___searchWithOtherSearchEngines) {
         const searchWithOther = function searchWithOther(index) {
