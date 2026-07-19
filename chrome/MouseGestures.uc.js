@@ -30,6 +30,23 @@
         }
     }
 
+    const MOUSE_GESTURE_COORDINATE_TOLERANCE = 8;
+
+    function isFinitePoint(x, y) {
+        return Number.isFinite(x) && Number.isFinite(y);
+    }
+
+    function isPointInsideBounds(x, y, width, height) {
+        if (!isFinitePoint(x, y) ||
+                !Number.isFinite(width) || !Number.isFinite(height)) {
+            return false;
+        }
+        const tolerance = MOUSE_GESTURE_COORDINATE_TOLERANCE;
+        return x >= -tolerance && y >= -tolerance &&
+                x <= width + tolerance &&
+                y <= height + tolerance;
+    }
+
     /// endregion utils
 
     /// region renderer
@@ -295,7 +312,7 @@ z-index: 2147483647 !important;`.trim();
          */
         createPath2D(x, y) {
             this.mouseMovePath = new Path2D();
-            if (x && y) {
+            if (isFinitePoint(x, y)) {
                 // high dpi scale support
                 let devicePixelRatio = window.devicePixelRatio || 1;
                 this.mouseMovePath.moveTo(
@@ -466,6 +483,9 @@ z-index: 2147483647 !important;`.trim();
          * @param {string?} gestureName
          */
         render(x, y, directionChain, gestureName) {
+            if (!isFinitePoint(x, y)) {
+                return;
+            }
             if (!this.isActive()) {
                 this.active(x, y);
             }
@@ -1121,6 +1141,10 @@ z-index: 2147483647 !important;`.trim();
             this.isStarting = false;
             // 是否拦截右键菜单触发
             this.hideFireContext = false;
+            this.gestureBrowser = null;
+            this.gestureTab = null;
+            this.gestureOrigin = null;
+            this.needsGestureResync = false;
             // 鼠标手势事件
             this.events = [
                 'mousedown',
@@ -1163,6 +1187,116 @@ z-index: 2147483647 !important;`.trim();
             }
         }
 
+        isGestureSourceChanged() {
+            return !!((this.gestureBrowser &&
+                    this.gestureBrowser !== gBrowser.selectedBrowser) ||
+                    (this.gestureTab && this.gestureTab !== gBrowser.selectedTab));
+        }
+
+        resyncGestureIfSourceChanged() {
+            if (!this.isMouseDownR || !this.isGestureSourceChanged()) {
+                return false;
+            }
+            this.resetGestureLineForCurrentBrowser();
+            return true;
+        }
+
+        captureGestureOrigin(browser = gBrowser && gBrowser.selectedBrowser) {
+            if (!browser) {
+                return null;
+            }
+            let rect;
+            try {
+                rect = browser.getBoundingClientRect();
+            } catch (e) {
+                rect = null;
+            }
+            const origin = {
+                screenX: browser.screenX,
+                screenY: browser.screenY,
+                clientLeft: rect && rect.left,
+                clientTop: rect && rect.top,
+                clientWidth: browser.clientWidth,
+                clientHeight: browser.clientHeight
+            };
+            return origin;
+        }
+
+        normalizeEventPoint(event, origin = this.gestureOrigin) {
+            if (!origin) {
+                return null;
+            }
+            if (Number.isFinite(event.clientX) &&
+                    Number.isFinite(event.clientY) &&
+                    Number.isFinite(origin.clientLeft) &&
+                    Number.isFinite(origin.clientTop)) {
+                const x = event.clientX - origin.clientLeft;
+                const y = event.clientY - origin.clientTop;
+                if (isPointInsideBounds(
+                        x, y, origin.clientWidth, origin.clientHeight)) {
+                    return {x, y};
+                }
+            }
+            const x = event.screenX - origin.screenX;
+            const y = event.screenY - origin.screenY;
+            if (!isPointInsideBounds(
+                    x, y, origin.clientWidth, origin.clientHeight)) {
+                return null;
+            }
+            return {x, y};
+        }
+
+        getPreviousPointFromMovement(event, point) {
+            if (!Number.isFinite(event.movementX) ||
+                    !Number.isFinite(event.movementY)) {
+                return null;
+            }
+            const x = point.x - event.movementX;
+            const y = point.y - event.movementY;
+            const {gestureOrigin: origin} = this;
+            if (!origin || !isPointInsideBounds(
+                    x, y, origin.clientWidth, origin.clientHeight)) {
+                return null;
+            }
+            return {x, y};
+        }
+
+        updateGestureSource(browser = gBrowser.selectedBrowser,
+                            tab = gBrowser.selectedTab) {
+            this.gestureBrowser = browser;
+            this.gestureTab = tab;
+            this.gestureOrigin = this.captureGestureOrigin(browser);
+        }
+
+        resetGestureLineForBrowser(browser = gBrowser.selectedBrowser,
+                                   tab = gBrowser.selectedTab) {
+            if (!this.isMouseDownR) {
+                return;
+            }
+            this.renderer.dispose();
+            this.directionHandler.clear();
+            this.directionChain = '';
+            this.lastX = 0;
+            this.lastY = 0;
+            this.isStarting = false;
+            this.needsGestureResync = true;
+            this.updateGestureSource(browser, tab);
+        }
+
+        resetGestureLineForCurrentBrowser() {
+            this.resetGestureLineForBrowser();
+        }
+
+        cancelGesture() {
+            if (!this.isMouseDownR && !this.renderer.isActive() &&
+                    !this.directionChain && !this.isStarting) {
+                return;
+            }
+            this.isMouseDownR = false;
+            this.hideFireContext = true;
+            this.clear();
+        }
+
         bindEvent() {
             for (let i = 0, a = this.events, l = a.length, type; i < l; i++) {
                 type = a[i];
@@ -1186,6 +1320,7 @@ z-index: 2147483647 !important;`.trim();
                     passive: true
                 });
             }
+            gBrowser.tabContainer.addEventListener('TabSelect', this, true);
             // 鼠标在浏览器其他位置松开
             window.addEventListener('mouseup', this, {
                 capture: true,
@@ -1213,6 +1348,7 @@ z-index: 2147483647 !important;`.trim();
             if (mPanelContainer) {
                 mPanelContainer.removeEventListener("mousemove", this, false);
             }
+            gBrowser.tabContainer.removeEventListener('TabSelect', this, true);
             window.removeEventListener('mouseup', this, true);
             window.removeEventListener('blur', this);
         }
@@ -1244,12 +1380,22 @@ z-index: 2147483647 !important;`.trim();
         }
 
         clear() {
+            const keepMouseDownR = this.isMouseDownR;
             this.renderer.dispose();
             this.directionHandler.clear();
             this.directionChain = '';
             this.lastX = 0;
             this.lastY = 0;
             this.isStarting = false;
+            if (keepMouseDownR) {
+                this.needsGestureResync = true;
+                this.updateGestureSource();
+            } else {
+                this.gestureBrowser = null;
+                this.gestureTab = null;
+                this.gestureOrigin = null;
+                this.needsGestureResync = false;
+            }
         }
 
 
@@ -1257,12 +1403,17 @@ z-index: 2147483647 !important;`.trim();
 
         mousedown(event) {
             if (event.button === 2) {
+                const origin = this.captureGestureOrigin();
+                const point = this.normalizeEventPoint(event, origin);
+                if (!point) {
+                    return;
+                }
                 this.isMouseDownR = true;
                 this.hideFireContext = false;
-                let {screenX: x, screenY: y} = event;
-                const {screenX, screenY} = gBrowser.selectedBrowser;
-                x -= screenX;
-                y -= screenY;
+                this.gestureBrowser = gBrowser.selectedBrowser;
+                this.gestureTab = gBrowser.selectedTab;
+                this.gestureOrigin = origin;
+                const {x, y} = point;
                 [this.lastX, this.lastY, this.directionChain] = [x, y, ''];
             }
             if (event.button === 0) {
@@ -1277,13 +1428,38 @@ z-index: 2147483647 !important;`.trim();
                 }
                 return;
             }
-            let {screenX: x, screenY: y} = event;
-            const {screenX, screenY} = gBrowser.selectedBrowser;
-            x -= screenX;
-            y -= screenY;
+            this.resyncGestureIfSourceChanged();
+            if (this.needsGestureResync) {
+                this.updateGestureSource();
+            }
+            const point = this.normalizeEventPoint(event);
+            if (!point) {
+                return;
+            }
+            const {x, y} = point;
+            if (this.needsGestureResync) {
+                const previous = this.getPreviousPointFromMovement(event, {x, y});
+                if (previous) {
+                    this.lastX = previous.x;
+                    this.lastY = previous.y;
+                    this.needsGestureResync = false;
+                    this.isStarting = true;
+                } else {
+                    this.lastX = x;
+                    this.lastY = y;
+                    this.needsGestureResync = false;
+                    this.isStarting = true;
+                    return;
+                }
+            }
             let [dx, dy] = [x - this.lastX, y - this.lastY];
             let direction = this.directionHandler.handleMove(dx, dy);
-            if (direction === false) return;
+            if (this.needsGestureResync) {
+                this.needsGestureResync = false;
+            }
+            if (direction === false) {
+                return;
+            }
             if (!this.renderer.isActive()) {
                 this.renderer.active(this.lastX, this.lastY);
             }
@@ -1305,6 +1481,7 @@ z-index: 2147483647 !important;`.trim();
 
         mouseup(event) {
             if (this.isMouseDownR && event.button === 2) {
+                this.resyncGestureIfSourceChanged();
                 // if (this.directionChain) this.shouldFireContext = false;
                 this.isMouseDownR = false;
                 this.directionChain && this.stopGesture();
@@ -1313,6 +1490,9 @@ z-index: 2147483647 !important;`.trim();
         }
 
         contextmenu(event) {
+            if (this.isMouseDownR) {
+                this.resyncGestureIfSourceChanged();
+            }
             if (this.isMouseDownR || this.hideFireContext) {
                 // this.shouldFireContext = true;
                 this.hideFireContext = false;
@@ -1327,6 +1507,7 @@ z-index: 2147483647 !important;`.trim();
             if (!this.isMouseDownR) {
                 return;
             }
+            this.resyncGestureIfSourceChanged();
             // this.shouldFireContext = false;
             this.hideFireContext = true;
             let direction = this.directionHandler.handleWheel(
@@ -1364,13 +1545,29 @@ z-index: 2147483647 !important;`.trim();
          */
         realBlur() {
             if (document.hasFocus()) {
+                if (this.isMouseDownR) {
+                    if (this.isGestureSourceChanged()) {
+                        this.resetGestureLineForCurrentBrowser();
+                    }
+                    return;
+                }
                 // tab switched
                 this.clear();
                 return;
             }
             if (this.isMouseDownR) {
-                this.endGesture();
+                this.cancelGesture();
             }
+        }
+
+        TabSelect(event) {
+            if (!this.isMouseDownR) {
+                return;
+            }
+            const tab = event && event.target;
+            const browser = (tab && gBrowser.getBrowserForTab &&
+                    gBrowser.getBrowserForTab(tab)) || gBrowser.selectedBrowser;
+            this.resetGestureLineForBrowser(browser, tab);
         }
 
         /// endregion event handlers
