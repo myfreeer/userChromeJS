@@ -1,6 +1,6 @@
 
 @-moz-document url("about:home"), url("about:newtab") {
-
+/*
 .layout-variant-a .top-sites-list, .layout-variant-b .top-sites-list {
   row-gap: 0 !important;
 }
@@ -9,8 +9,14 @@
     width: 950px !important;
   }
 }
+*/
 .logo-and-wordmark-wrapper {
   display: none !important;
 }
-
+.nova-enabled.logo-in-content .content {
+  grid-row: 2 !important;;
+}
+.top-sites-list {
+  --space-medium: 2.5rem;
+}
 }

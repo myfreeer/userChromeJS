@@ -179,7 +179,11 @@
       --urlbar-margin-inline: 0px;
     }
     /* endregion Firefox 141 url bar */
-
+    /* region Firefox 152 tab */
+    .tabbrowser-tab[selected="true"] {
+        background-color: white !important;
+    }
+    /* endregion Firefox 152 tab */
 }
 
 /* region 更清晰的 canvas */
